@@ -8,8 +8,8 @@ Description: A productivity-focused R package manager inspired by Python's 'uv'.
     'DESCRIPTION' file as intent and 'renv.lock' as state. Automates the
     complexity of keeping manifests, installed packages, and lockfiles in sync
     with simple commands like init(), add(), remove(), and sync().
-URL: https://github.com/SInginc/intent, https://singinc.github.io/intent/
-BugReports: https://github.com/SInginc/intent/issues
+URL: https://github.com/XiaochangJackLiu/intent, https://xiaochangjackliu.github.io/intent/
+BugReports: https://github.com/XiaochangJackLiu/intent/issues
 Depends:
     R (>= 4.0)
 Imports:

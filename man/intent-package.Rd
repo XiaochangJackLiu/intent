@@ -11,9 +11,9 @@ A productivity-focused R package manager inspired by Python's 'uv'. Provides a s
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/SInginc/intent}
-  \item \url{https://singinc.github.io/intent/}
-  \item Report bugs at \url{https://github.com/SInginc/intent/issues}
+  \item \url{https://github.com/XiaochangJackLiu/intent}
+  \item \url{https://xiaochangjackliu.github.io/intent/}
+  \item Report bugs at \url{https://github.com/XiaochangJackLiu/intent/issues}
 }
 
 }

@@ -2,7 +2,7 @@
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![R-CMD-check](https://github.com/SInginc/intent/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/SInginc/intent/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/XiaochangJackLiu/intent/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/XiaochangJackLiu/intent/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 **`intent`** is a productivity-focused R package manager inspired by Python's `uv`. It provides a single interface to manage project dependencies, using the `DESCRIPTION` file as your **intent** (what you want) and `renv.lock` as your **state** (what you have).
@@ -50,10 +50,10 @@ In standard R, keeping your `DESCRIPTION` file, your installed packages, and you
 
 ```r
 # Install from GitHub (recommended)
-pak::pak("SInginc/intent")
+pak::pak("XiaochangJackLiu/intent")
 
 # Or using remotes
-remotes::install_github("SInginc/intent")
+remotes::install_github("XiaochangJackLiu/intent")
 ```
 
 ### CLI Setup

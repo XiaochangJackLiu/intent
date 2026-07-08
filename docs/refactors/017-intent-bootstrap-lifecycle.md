@@ -70,7 +70,7 @@ Examples:
 
 ```r
 install.packages("intent")
-pak::pkg_install("SInginc/intent")
+pak::pkg_install("XiaochangJackLiu/intent")
 install.packages("intent", repos = "https://r.example.com/packages/latest")
 ```
 
