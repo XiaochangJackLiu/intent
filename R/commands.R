@@ -9,6 +9,10 @@ cmd_init <- function(
   install_self <- match.arg(install_self, c("hydrate", "never"))
   bootstrap_sources <- .libPaths()
   project_dir <- normalizePath(path, mustWork = FALSE)
+  classification <- classify_init_description(project_dir)
+  renv_state <- init_renv_state(project_dir)
+
+  stop_for_unsafe_init(classification, renv_state)
 
   if (!dir.exists(path)) {
     dir.create(project_dir, recursive = TRUE)
@@ -29,15 +33,8 @@ cmd_init <- function(
     rproject <- desc::description$new(desc_path)
   }
 
-  if (!rproject$has_dep("pak")) {
-    rproject$set_dep("pak", type = "Suggests")
-  }
-  if (!rproject$has_dep("renv")) {
-    rproject$set_dep("renv", type = "Suggests")
-  }
-  if (!rproject$has_dep("intent")) {
-    rproject$set_dep("intent", type = "Suggests")
-  }
+  bootstrap_plan <- bootstrap_dependency_plan(rproject)
+  apply_bootstrap_dependencies(rproject, bootstrap_plan)
 
   current_repos <- get_repos(desc_path)
   has_repos <- length(current_repos) > 0
@@ -98,12 +95,12 @@ cmd_init <- function(
 
   rproject$write(desc_path)
 
-  if (!dir.exists(file.path(project_dir, "renv"))) {
-    backend_init(project_dir, repos)
-    maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
-  } else {
+  if (isTRUE(renv_state$renv_dir) || isTRUE(renv_state$lockfile)) {
     maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
     intent_sync_project(project_dir)
+  } else {
+    backend_init(project_dir, repos)
+    maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
   }
 
   renviron_path <- file.path(project_dir, ".Renviron")
@@ -126,6 +123,73 @@ cmd_init <- function(
   message("intent project initialized successfully in ", project_dir)
   message("Please restart your R session for changes to take effect.")
   invisible(project_dir)
+}
+
+classify_init_description <- function(project) {
+  desc_path <- file.path(project, "DESCRIPTION")
+  if (!file.exists(desc_path)) {
+    return(list(type = "missing_manifest", error = NULL))
+  }
+
+  desc_obj <- tryCatch(
+    desc::description$new(desc_path),
+    error = function(e) e
+  )
+  if (inherits(desc_obj, "error")) {
+    return(list(type = "invalid_manifest", error = conditionMessage(desc_obj)))
+  }
+
+  repos <- get_repos(desc_path)
+  repo_names <- names(repos)
+  has_valid_repos <- length(repos) > 0 &&
+    !is.null(repo_names) &&
+    all(nzchar(repo_names)) &&
+    all(nzchar(repos))
+
+  if (has_valid_repos) {
+    return(list(type = "intent_manifest", error = NULL))
+  }
+
+  list(type = "non_intent_manifest", error = NULL)
+}
+
+init_renv_state <- function(project) {
+  list(
+    renv_dir = dir.exists(file.path(project, "renv")),
+    lockfile = file.exists(file.path(project, "renv.lock"))
+  )
+}
+
+stop_for_unsafe_init <- function(classification, renv_state) {
+  switch(
+    classification$type,
+    invalid_manifest = stop(
+      "DESCRIPTION exists but could not be parsed: ",
+      classification$error,
+      call. = FALSE
+    ),
+    non_intent_manifest = stop(
+      "DESCRIPTION exists but is not an intent manifest. ",
+      "Before running `intent::init()`, ensure Imports and Suggests list ",
+      "the direct dependencies to manage and add `Config/intent/repos/<NAME>` ",
+      "fields for project repositories. After the manifest is compliant, ",
+      "run `intent::status()` or `intent::verify()` to inspect the project.",
+      call. = FALSE
+    ),
+    missing_manifest = {
+      if (isTRUE(renv_state$renv_dir) || isTRUE(renv_state$lockfile)) {
+        stop(
+          "No DESCRIPTION file found, but existing renv state is present. ",
+          "`intent::init()` cannot safely infer project intent from renv state ",
+          "alone. Create an intent-compliant DESCRIPTION first.",
+          call. = FALSE
+        )
+      }
+    },
+    intent_manifest = NULL
+  )
+
+  invisible(TRUE)
 }
 
 confirm_default_repos <- function(repos, confirm_repos) {

@@ -173,12 +173,21 @@ flowchart LR
 
 ### `intent::init(path, repos, install_self = "hydrate")`
 
-Initializes a new or existing directory as an `intent` project.
+Initializes a new directory, or an existing directory that already has an
+intent-compliant `DESCRIPTION`, as an `intent` project.
 
-* Creates a `DESCRIPTION` file if it doesn't exist.
+* Classifies `DESCRIPTION` before mutating project files.
+* Creates a `DESCRIPTION` file only for new projects without existing `renv`
+  state.
+* Stops before writing if an existing `DESCRIPTION` is not intent-compliant.
+* Stops before writing if `renv.lock` or `renv/` exists without a
+  `DESCRIPTION`.
 * Initializes a "bare" `renv` environment.
 * Sets `renv` to **explicit mode** (only tracks packages in `DESCRIPTION`).
 * Configures `.Rprofile` and `.Renviron` for automatic environment loading.
+* Adds bootstrap tool dependencies. `intent` is written with a default
+  lower-bound constraint, and `pak` / `renv` minimums are copied from the
+  running `intent` package metadata when declared there.
 * **Defaults to [Posit Package Manager](https://packagemanager.posit.co/cran/latest)**
   when no repositories are specified. The default repository is named `RSPM`
   to match `renv.lock` provenance. Use `repos = c(NAME = "...")` to override.
@@ -425,19 +434,25 @@ renv/sandbox/
 
 ## Migrating from Existing renv Projects
 
-If you have an existing `renv` project:
+If you have an existing `renv` project, `intent::init()` will not infer project
+intent from `renv.lock` alone. Prepare `DESCRIPTION` first:
 
 ```r
 # 1. Ensure your DESCRIPTION lists all intended dependencies
 #    (Check Imports and Suggests sections)
 
-# 2. Set renv to explicit mode
+# 2. Add intent repository policy fields, for example:
+#    Config/intent/repos/CRAN: https://cran.r-project.org
+
+# 3. Set renv to explicit mode
 renv::settings$snapshot.type("explicit")
 
-# 3. Enable pak for faster installs
+# 4. Enable pak for faster installs
 #    Add to .Renviron: RENV_CONFIG_PAK_ENABLED=TRUE
 
-# 4. Sync to ensure consistency
+# 5. Run intent::init() after DESCRIPTION is intent-compliant,
+#    then sync to ensure consistency
+intent::init()
 intent::sync()
 ```
 
@@ -480,16 +495,24 @@ Below are the technical specifications for the core API.
 
 **Logical Flow:**
 
-1. **Infrastructure:** Create `DESCRIPTION` if missing.
-2. **Repository Default:** If no `repos` are provided and none exist in an
+1. **DESCRIPTION Classification:** Before writing files, classify the project as
+   an intent manifest, a non-intent manifest, an invalid manifest, or a missing
+   manifest.
+2. **Safety Gate:** Stop before writing when `DESCRIPTION` is non-intent or
+   invalid, or when `renv.lock` / `renv/` exists without `DESCRIPTION`.
+3. **Infrastructure:** Create `DESCRIPTION` only for new projects without
+   existing renv state.
+4. **Repository Default:** If no `repos` are provided and none exist in an
    existing DESCRIPTION, default to Posit Package Manager.
-3. **State Init:** Call `renv::init(bare = TRUE)`. This creates the `renv/` folder and `renv.lock` without scanning files.
-4. **Policy Setting:** Set `renv::settings$snapshot.type("explicit")`. This is non-negotiable for the `intent` workflow.
-5. **Bootstrapping:** Write `source("renv/activate.R")` to `.Rprofile`.
-6. **Tool Hydration:** If `install_self = "hydrate"`, copy the already-installed
+5. **State Init:** Call `renv::init(bare = TRUE)`. This creates the `renv/` folder and `renv.lock` without scanning files.
+6. **Policy Setting:** Set `renv::settings$snapshot.type("explicit")`. This is non-negotiable for the `intent` workflow.
+7. **Bootstrapping:** Write `source("renv/activate.R")` to `.Rprofile`.
+8. **Tool Constraints:** Preserve user constraints for `intent`, `pak`, and
+   `renv`; otherwise write default bootstrap constraints.
+9. **Tool Hydration:** If `install_self = "hydrate"`, copy the already-installed
    `intent` package from the current library paths into the project library when
    available, then snapshot it.
-7. **Engine Config:** Set `RENV_CONFIG_PAK_ENABLED=TRUE` in `.Renviron` to enable `pak` as the installation engine.
+10. **Engine Config:** Set `RENV_CONFIG_PAK_ENABLED=TRUE` in `.Renviron` to enable `pak` as the installation engine.
 
 **Exit State:**
 

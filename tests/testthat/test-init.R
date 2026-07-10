@@ -62,6 +62,246 @@ test_that("init can leave intent as an external tool", {
   expect_equal(install_self_seen, "never")
 })
 
+test_that("init refuses existing non-intent DESCRIPTION without mutation", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  desc_path <- file.path(tmp_dir, "DESCRIPTION")
+  lock_path <- file.path(tmp_dir, "renv.lock")
+  writeLines(
+    c(
+      "Package: existing",
+      "Version: 0.0.1",
+      "Imports: glue"
+    ),
+    desc_path
+  )
+  writeLines("existing lock", lock_path)
+
+  original_desc <- readLines(desc_path)
+  original_lock <- readLines(lock_path)
+  called <- FALSE
+
+  mockery::stub(cmd_init, "backend_init", function(...) {
+    called <<- TRUE
+  })
+
+  expect_error(
+    cmd_init(path = tmp_dir, repos = c(CRAN = "https://example.test")),
+    "intent::status\\(\\).*intent::verify\\(\\)"
+  )
+
+  expect_false(called)
+  expect_equal(readLines(desc_path), original_desc)
+  expect_equal(readLines(lock_path), original_lock)
+  expect_false(file.exists(file.path(tmp_dir, ".Renviron")))
+  expect_false(file.exists(file.path(tmp_dir, ".Rprofile")))
+})
+
+test_that("init refuses invalid DESCRIPTION before backend work", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  desc_path <- file.path(tmp_dir, "DESCRIPTION")
+  writeLines("not a valid DESCRIPTION file", desc_path)
+
+  called <- FALSE
+  mockery::stub(cmd_init, "backend_init", function(...) {
+    called <<- TRUE
+  })
+
+  expect_error(
+    cmd_init(path = tmp_dir, install_self = "never"),
+    "could not be parsed"
+  )
+
+  expect_false(called)
+  expect_equal(readLines(desc_path), "not a valid DESCRIPTION file")
+})
+
+test_that("init refuses missing DESCRIPTION with existing renv.lock", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  lock_path <- file.path(tmp_dir, "renv.lock")
+  writeLines("existing lock", lock_path)
+
+  called <- FALSE
+  mockery::stub(cmd_init, "backend_init", function(...) {
+    called <<- TRUE
+  })
+
+  expect_error(
+    cmd_init(path = tmp_dir, install_self = "never"),
+    "existing renv state"
+  )
+
+  expect_false(called)
+  expect_false(file.exists(file.path(tmp_dir, "DESCRIPTION")))
+  expect_equal(readLines(lock_path), "existing lock")
+})
+
+test_that("init refuses missing DESCRIPTION with existing renv directory", {
+  tmp_dir <- tempfile()
+  dir.create(file.path(tmp_dir, "renv"), recursive = TRUE)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) {
+    called <<- TRUE
+  })
+
+  expect_error(
+    cmd_init(path = tmp_dir, install_self = "never"),
+    "existing renv state"
+  )
+
+  expect_false(called)
+  expect_false(file.exists(file.path(tmp_dir, "DESCRIPTION")))
+})
+
+test_that("init allows intent manifest and initializes backend when renv is absent", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: existing",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  backend_called <- FALSE
+  sync_called <- FALSE
+  mockery::stub(cmd_init, "backend_init", function(project, repos) {
+    backend_called <<- TRUE
+    expect_equal(repos[["CRAN"]], "https://example.test")
+  })
+  mockery::stub(cmd_init, "intent_sync_project", function(...) {
+    sync_called <<- TRUE
+  })
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  expect_true(backend_called)
+  expect_false(sync_called)
+})
+
+test_that("init allows intent manifest and syncs when renv exists", {
+  tmp_dir <- tempfile()
+  dir.create(file.path(tmp_dir, "renv"), recursive = TRUE)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: existing",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  backend_called <- FALSE
+  sync_called <- FALSE
+  mockery::stub(cmd_init, "backend_init", function(...) {
+    backend_called <<- TRUE
+  })
+  mockery::stub(cmd_init, "intent_sync_project", function(project) {
+    sync_called <<- identical(normalizePath(project), normalizePath(tmp_dir))
+  })
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  expect_false(backend_called)
+  expect_true(sync_called)
+})
+
+test_that("init syncs intent manifest with existing lockfile but no renv directory", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: existing",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+  writeLines("existing lock", file.path(tmp_dir, "renv.lock"))
+
+  backend_called <- FALSE
+  sync_called <- FALSE
+  mockery::stub(cmd_init, "backend_init", function(...) {
+    backend_called <<- TRUE
+  })
+  mockery::stub(cmd_init, "intent_sync_project", function(project) {
+    sync_called <<- identical(normalizePath(project), normalizePath(tmp_dir))
+  })
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  expect_false(backend_called)
+  expect_true(sync_called)
+})
+
+test_that("init writes default bootstrap version constraints", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  mockery::stub(cmd_init, "backend_init", function(...) {})
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  deps <- desc::desc_get_deps(file = file.path(tmp_dir, "DESCRIPTION"))
+  versions <- bootstrap_dependency_versions()
+  expect_equal(deps$version[deps$package == "intent"], versions[["intent"]])
+  expect_equal(
+    deps$version[deps$package == "pak"],
+    bootstrap_version_or_any(versions[["pak"]])
+  )
+  expect_equal(
+    deps$version[deps$package == "renv"],
+    bootstrap_version_or_any(versions[["renv"]])
+  )
+})
+
+test_that("init preserves user bootstrap version constraints", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: existing",
+      "Version: 0.0.1",
+      "Suggests:",
+      "    intent (>= 0.9.0),",
+      "    pak (>= 0.8.0),",
+      "    renv (== 1.1.4)",
+      "Config/intent/repos/CRAN: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  mockery::stub(cmd_init, "backend_init", function(...) {})
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  deps <- desc::desc_get_deps(file = file.path(tmp_dir, "DESCRIPTION"))
+  expect_equal(deps$version[deps$package == "intent"], ">= 0.9.0")
+  expect_equal(deps$version[deps$package == "pak"], ">= 0.8.0")
+  expect_equal(deps$version[deps$package == "renv"], "== 1.1.4")
+})
+
 test_that("intent hydration failure does not fail init", {
   tmp_dir <- tempfile()
   dir.create(tmp_dir)

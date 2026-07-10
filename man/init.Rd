@@ -35,7 +35,17 @@ new project library. \code{"never"} leaves \code{intent} as an external tool onl
 repository when no repository is configured. Defaults to \code{interactive()}.}
 }
 \description{
-Sets up a directory as an \code{intent} project by creating a \code{DESCRIPTION} file (if missing),
-initializing a bare \code{renv} environment, setting the snapshot type to "explicit",
-and configuring \code{.Rprofile} and \code{.Renviron}.
+Sets up a directory as an \code{intent} project. \code{init()} first classifies the
+existing \code{DESCRIPTION} file, if any, before mutating project files. Existing
+projects must already have an intent-compliant \code{DESCRIPTION} with
+\verb{Config/intent/repos/} fields; otherwise init stops before rewriting
+\code{renv.lock}, \code{.Rprofile}, \code{.Renviron}, or the project library.
+}
+\details{
+For new empty projects, \code{init()} creates \code{DESCRIPTION}, initializes a bare
+\code{renv} environment, sets the snapshot type to "explicit", and configures
+\code{.Rprofile} and \code{.Renviron}. The bootstrap dependency on \code{intent} is written
+with a default lower-bound version constraint. Minimum \code{pak} and \code{renv}
+constraints are copied from the running \code{intent} package metadata when
+declared there; existing user constraints are preserved.
 }

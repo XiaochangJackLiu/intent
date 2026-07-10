@@ -53,3 +53,8 @@ plan, and updated after implementation with the actual result.
 - [017 Intent Bootstrap Lifecycle](017-intent-bootstrap-lifecycle.md)
 - [018 Repository Policy](018-repository-policy.md)
 - [019 CI Platform Failures on macOS ARM64](019-ci-platform-failures.md)
+- [020 URL-First Repo Matching](020-url-first-repo-matching.md)
+- [021 Dehardcode Constants](021-dehardcode-constants.md)
+- [022 Init DESCRIPTION-First Safety](022-init-description-first-safety.md)
+- [023 Bootstrap Dependency Planning](023-bootstrap-dependency-planning.md)
+- [024 Adopt Migration Plan](024-adopt-migration-plan.md)

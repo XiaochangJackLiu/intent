@@ -1,8 +1,17 @@
 #' Initialize an intent Project
 #'
-#' Sets up a directory as an `intent` project by creating a `DESCRIPTION` file (if missing),
-#' initializing a bare `renv` environment, setting the snapshot type to "explicit",
-#' and configuring `.Rprofile` and `.Renviron`.
+#' Sets up a directory as an `intent` project. `init()` first classifies the
+#' existing `DESCRIPTION` file, if any, before mutating project files. Existing
+#' projects must already have an intent-compliant `DESCRIPTION` with
+#' `Config/intent/repos/` fields; otherwise init stops before rewriting
+#' `renv.lock`, `.Rprofile`, `.Renviron`, or the project library.
+#'
+#' For new empty projects, `init()` creates `DESCRIPTION`, initializes a bare
+#' `renv` environment, sets the snapshot type to "explicit", and configures
+#' `.Rprofile` and `.Renviron`. The bootstrap dependency on `intent` is written
+#' with a default lower-bound version constraint. Minimum `pak` and `renv`
+#' constraints are copied from the running `intent` package metadata when
+#' declared there; existing user constraints are preserved.
 #'
 #' @param path Character string. Path to the new project directory. Defaults to current working directory.
 #' @param repos Character vector. Named repositories to use. Defaults to
