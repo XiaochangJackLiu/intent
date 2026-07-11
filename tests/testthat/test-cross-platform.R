@@ -12,7 +12,7 @@ test_that("fixture: RSPM name is supplemented when URL matches declared repo", {
   lockfile <- file.path("fixtures", "lockfile-rspm-name.json")
   lock <- renv::lockfile_read(lockfile)
 
-  # Declare CRAN with the same URL — RSPM should be resolved
+  # Declare CRAN with the same URL -- RSPM should be resolved
   repos <- c(CRAN = "https://packagemanager.posit.co/cran/latest")
   lock <- intent_supplement_repositories(lock, repos)
 

@@ -312,7 +312,7 @@ test_that("bootstrap plan ok is FALSE only on error severity", {
     versions = c(intent = ">= 1.2.3", pak = ">= 1.5.0", renv = NA)
   )
 
-  # Only warnings, no errors → ok is still TRUE
+  # Only warnings, no errors -> ok is still TRUE
   expect_true(plan$ok)
   expect_true(nrow(plan$issues) > 0)
   expect_false(any(plan$issues$severity == "error"))

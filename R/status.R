@@ -266,7 +266,7 @@ print.adoption_plan <- function(x, ...) {
         " (",
         x$candidates$source[[i]],
         ")",
-        " — ",
+        " -- ",
         x$candidates$reason[[i]],
         "\n",
         sep = ""

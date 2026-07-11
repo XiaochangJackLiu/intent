@@ -409,7 +409,7 @@ test_that("intent::init creates necessary files", {
     file = file.path(tmp_dir, "renv.lock"),
     project = tmp_dir
   )
-  ### check repos — user's name preserved as-is
+  ### check repos -- user's name preserved as-is
   renv_repos <- renv_lock$R$Repositories
   expect_equal(names(renv_repos), c("CRAN"))
   expect_equal(
