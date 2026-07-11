@@ -91,6 +91,21 @@ cmd_init <- function(
     }
   }
 
+  for (repo_name in names(repos)) {
+    if (repo_url_is_platform_specific(repos[[repo_name]])) {
+      warning(
+        "Config/intent/repos/",
+        repo_name,
+        " uses a platform-specific URL: ",
+        repos[[repo_name]],
+        "\n",
+        "Cross-platform restore will fail on other operating systems. ",
+        "Use a platform-agnostic URL.",
+        call. = FALSE
+      )
+    }
+  }
+
   rproject$write(desc_path)
 
   if (isTRUE(renv_state$renv_dir) || isTRUE(renv_state$lockfile)) {

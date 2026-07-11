@@ -382,7 +382,7 @@ test_that("intent::init creates necessary files", {
   init(
     path = tmp_dir,
     repos = c(
-      CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux_2_28/latest"
+      CRAN = "https://packagemanager.posit.co/cran/latest"
     )
   )
 
@@ -401,7 +401,7 @@ test_that("intent::init creates necessary files", {
   ### Check repos in DESCRIPTION
   expect_equal(
     rproject$get_field("Config/intent/repos/CRAN"),
-    "https://packagemanager.posit.co/cran/__linux__/manylinux_2_28/latest"
+    "https://packagemanager.posit.co/cran/latest"
   )
 
   ## renv.lock
@@ -414,7 +414,7 @@ test_that("intent::init creates necessary files", {
   expect_equal(names(renv_repos), c("CRAN"))
   expect_equal(
     renv_repos[[1]],
-    "https://packagemanager.posit.co/cran/__linux__/manylinux_2_28/latest"
+    "https://packagemanager.posit.co/cran/latest"
   )
   expect_true("pak" %in% names(renv_lock$Packages))
   expect_true("renv" %in% names(renv_lock$Packages))
@@ -615,4 +615,23 @@ test_that("init preserves user bootstrap constraints byte-identically in DESCRIP
   renv_row <- deps[deps$package == "renv", , drop = FALSE]
   expect_equal(nrow(renv_row), 1)
   expect_equal(renv_row$version[[1]], "== 1.1.4")
+})
+
+test_that("init warns on platform-specific repo URL", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  mockery::stub(cmd_init, "backend_init", function(...) {})
+
+  expect_warning(
+    cmd_init(
+      path = tmp_dir,
+      repos = c(
+        CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux_2_28/latest"
+      ),
+      install_self = "never"
+    ),
+    "platform-specific"
+  )
 })

@@ -358,6 +358,10 @@ intent_verify_project_issues <- function(project, status) {
   )
   issues <- rbind(
     issues,
+    intent_check_platform_repos(repos, status$source_policy)
+  )
+  issues <- rbind(
+    issues,
     intent_verify_lockfile_closure_issues(
       lock,
       roots = c(status$manifest_packages, "intent", "pak", "renv")
@@ -788,6 +792,48 @@ intent_check_repository_policy <- function(row, repos) {
 
 normalize_repo_url <- function(url) {
   sub("/+$", "", trimws(url))
+}
+
+repo_url_is_platform_specific <- function(url) {
+  grepl(
+    "__(linux|macos|windows|mac)__|manylinux|/macos/|/windows/",
+    url
+  )
+}
+
+intent_check_platform_repos <- function(repos, source_policy) {
+  if (is.null(source_policy) || identical(source_policy$mode, "off")) {
+    return(intent_verification_issues_empty())
+  }
+
+  issues <- intent_verification_issues_empty()
+  for (repo_name in names(repos)) {
+    url <- repos[[repo_name]]
+    if (repo_url_is_platform_specific(url)) {
+      severity <- if (identical(source_policy$mode, "error")) {
+        "error"
+      } else {
+        "warning"
+      }
+      issues <- rbind(
+        issues,
+        intent_verification_issue(
+          "platform_repos",
+          severity,
+          paste0(
+            sprintf(
+              "Config/intent/repos/%s uses a platform-specific URL: %s. ",
+              repo_name,
+              url
+            ),
+            "Cross-platform restore will fail on other operating systems. ",
+            "Use a platform-agnostic URL."
+          )
+        )
+      )
+    }
+  }
+  issues
 }
 
 # Repository names that renv lockfile package records may contain even

@@ -129,3 +129,69 @@ test_that("intent_snapshot does not replace lockfile on source policy error", {
   )
   expect_equal(readLines(lockfile), "official lockfile")
 })
+
+test_that("repo_url_is_platform_specific detects Linux-specific PPM URLs", {
+  expect_true(repo_url_is_platform_specific(
+    "https://packagemanager.posit.co/cran/__linux__/manylinux_2_28/latest"
+  ))
+})
+
+test_that("repo_url_is_platform_specific detects macOS-specific PPM URLs", {
+  expect_true(repo_url_is_platform_specific(
+    "https://packagemanager.posit.co/cran/__macos__/latest"
+  ))
+})
+
+test_that("repo_url_is_platform_specific detects Windows-specific PPM URLs", {
+  expect_true(repo_url_is_platform_specific(
+    "https://packagemanager.posit.co/cran/__windows__/latest"
+  ))
+})
+
+test_that("repo_url_is_platform_specific returns FALSE for platform-agnostic URLs", {
+  expect_false(repo_url_is_platform_specific(
+    "https://packagemanager.posit.co/cran/latest"
+  ))
+  expect_false(repo_url_is_platform_specific(
+    "https://cran.r-project.org"
+  ))
+})
+
+test_that("repo_url_is_platform_specific detects manylinux in URL", {
+  expect_true(repo_url_is_platform_specific(
+    "https://example.com/r/src/contrib/manylinux/latest"
+  ))
+})
+
+test_that("intent_check_platform_repos returns empty when mode is off", {
+  repos <- c(
+    CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux/latest"
+  )
+  issues <- intent_check_platform_repos(repos, list(mode = "off"))
+  expect_equal(nrow(issues), 0)
+})
+
+test_that("intent_check_platform_repos returns warning in warn mode", {
+  repos <- c(
+    CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux/latest"
+  )
+  issues <- intent_check_platform_repos(repos, list(mode = "warn"))
+  expect_equal(nrow(issues), 1)
+  expect_equal(issues$severity[[1]], "warning")
+  expect_match(issues$message[[1]], "platform-specific")
+})
+
+test_that("intent_check_platform_repos returns error in error mode", {
+  repos <- c(
+    CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux/latest"
+  )
+  issues <- intent_check_platform_repos(repos, list(mode = "error"))
+  expect_equal(nrow(issues), 1)
+  expect_equal(issues$severity[[1]], "error")
+})
+
+test_that("intent_check_platform_repos returns empty for platform-agnostic URL", {
+  repos <- c(CRAN = "https://packagemanager.posit.co/cran/latest")
+  issues <- intent_check_platform_repos(repos, list(mode = "warn"))
+  expect_equal(nrow(issues), 0)
+})
