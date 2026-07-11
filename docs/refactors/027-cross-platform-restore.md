@@ -236,14 +236,14 @@ test_that("init warns on platform-specific repo URL", {
 
 ## Implementation Steps
 
-1. Add `repo_url_is_platform_specific()` and `intent_check_platform_repos()`
-   to `R/status-core.R` or a new file.
-2. Integrate platform URL checking into `intent_verify_project_issues()` so
-   `verify()` reports platform-specific URLs.
-3. Add `adopt_check_repo_urls()` to `adopt_build_issues()` so `adopt()`
+1. ~~Add `repo_url_is_platform_specific()` and `intent_check_platform_repos()`
+   to `R/status-core.R`.~~ **Done** (`c0b5578`).
+2. ~~Integrate platform URL checking into `intent_verify_project_issues()` so
+   `verify()` reports platform-specific URLs.~~ **Done** (`c0b5578`).
+3. ~~Add warning during `cmd_init()` when user-provided repos contain
+   platform-specific URLs.~~ **Done** (`c0b5578`).
+4. Add `adopt_check_repo_urls()` to `adopt_build_issues()` so `adopt()`
    reports platform-specific URLs in dry-run output.
-4. Optionally warn during `cmd_init()` when user-provided repos contain
-   platform-specific URLs.
 5. Add fixture lockfiles to `tests/testthat/fixtures/`.
 6. Add tests for platform URL detection, verification issues, and
    supplement resolution.

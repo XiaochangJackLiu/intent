@@ -1,0 +1,16 @@
+{
+  "R": {
+    "Version": "4.5.0",
+    "Repositories": {
+      "RSPM": "https://packagemanager.posit.co/cran/latest"
+    }
+  },
+  "Packages": {
+    "dplyr": {
+      "Package": "dplyr",
+      "Version": "1.1.4",
+      "Source": "Repository",
+      "Repository": "RSPM"
+    }
+  }
+}
