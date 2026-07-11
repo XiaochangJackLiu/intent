@@ -284,5 +284,24 @@ Add focused unit tests for bootstrap planning:
   upper-bound cases that cannot satisfy intent's lower-bound requirements.
   Focused bootstrap tests cover defaults, preservation, lower-bound metadata,
   non-lower-bound metadata, conflict detection, and apply refusal.
-- Follow-up work: Reuse the bootstrap plan in a future `adopt()` dry-run output
-  and decide whether to expose a user-facing plan print method.
+- Follow-up work:
+  - **Print/format/JSON methods** (`025`): `bootstrap_dependency_plan` has an S3
+    class but no `print()` or `as.character()` method. These are prerequisites for
+    `adopt()` dry-run output (`024`). Follow the existing patterns in
+    `print.intent_plan`, `print.intent_status`, `as.character.intent_plan`.
+  - **Warning severity**: Conflict detection only produces `severity: "error"`.
+    The design specified warning-level issues for unparseable or ambiguous
+    constraints (e.g. `renv (^1.0.0)` with npm-style syntax, or `> 1.0.0` where
+    intent requires `>= 1.5.0` — not a conflict but worth noting). The `severity`
+    column exists in the `issues` data frame but `"warning"` is never written.
+    `ok` should check `severity == "error"` explicitly, not `any(issues)`.
+  - **Input validation**: `bootstrap_dependency_plan()` does not validate its
+    `versions` argument. A caller could inject an exact pin for `intent`
+    (e.g. `c(intent = "== 1.0.0")`), contradicting the lower-bound policy.
+    Add lightweight validation that `intent`'s version is a `>=` constraint.
+  - **Temp DESCRIPTION robustness**: `bootstrap_metadata_deps()` writes a minimal
+    temp DESCRIPTION that omits the required `Title` field. While `desc` currently
+    tolerates this, it is fragile against future `desc` package changes. Add
+    `Title: Internal Bootstrap Metadata Parser` to the temp file.
+  - Reuse the bootstrap plan in a future `adopt()` dry-run output
+    and decide whether to expose a user-facing plan print method (`024`, `025`).

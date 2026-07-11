@@ -20,8 +20,9 @@ automatically. Manual analysis is needed.
 | Source File | Functions | Unit-Tested | Integration-Tested | Not Tested |
 |-------------|-----------|:-----------:|:------------------:|:----------:|
 | `R/backend.R` | 8 | 0 | 8 | 0 |
+| `R/bootstrap.R` | 14 | 9 | 0 | 5 |
 | `R/cli.R` | 10 | 5 | 0 | 5 |
-| `R/commands.R` | 5 | 4 | 5 | 0 |
+| `R/commands.R` | 8 | 7 | 5 | 0 |
 | `R/desc.R` | 5 | 4 | 0 | 1 |
 | `R/init.R` | 1 | 0 | 1 | 0 |
 | `R/add.R` | 1 | 0 | 1 | 0 |
@@ -30,7 +31,7 @@ automatically. Manual analysis is needed.
 | `R/status.R` | 6 | 3 | 0 | 3 |
 | `R/status-core.R` | 5 | 3 | 0 | 2 |
 | `R/utils.R` | 13 | 6 | 4 | 3 |
-| **Total** | **56** | **25** | **21** | **10** |
+| **Total** | **73** | **37** | **21** | **15** |
 
 Estimated line coverage: ~70% unit + ~20% integration = **~90% combined**.
 
@@ -57,7 +58,8 @@ isolation. See that file for instructions.)
 
 ```
 tests/testthat/
-├── test-init.R              Integration: real project init (1 test)
+├── test-init.R              Integration + unit: init safety, classification (14 tests)
+├── test-bootstrap-deps.R    Unit: bootstrap dependency planning (9 tests)
 ├── test-add-remove.R        Integration: real add/remove cycle (1 test)
 ├── test-sync.R              Integration + unit: sync/prune behavior (4 tests)
 ├── test-cli.R               Unit: dispatch + flag parsing (10 tests)
@@ -140,8 +142,22 @@ Fill this in after implementation.
   coverage via covr (run in clean session via `tools/run_coverage.R`). Filled
   the three high-priority gaps: added unit tests for `intent_sync_project()`,
   `intent_get_project_deps()`, and `cli_print_help()`. Test suite now has
-  147 tests (0 failures). Documented the split between unit tests (fast, no
+  324 tests (0 failures). Documented the split between unit tests (fast, no
   network) and integration tests (real `renv`/`pak` operations).
-- Follow-up work: Add a Codecov CI gate once coverage tooling works in the
-  GitHub Actions environment. Add edge-case tests for init-on-existing-project
-  with repos (warning path).
+- Follow-up work:
+  - Add a Codecov CI gate once coverage tooling works in the GitHub Actions
+    environment.
+  - Add edge-case tests for init-on-existing-project with repos (warning path).
+  - **022 + 023 integration test** (`026`): add an end-to-end test that
+    verifies the full init chain — classify → plan bootstrap → apply → write
+    DESCRIPTION → confirm that user's pre-existing `renv` constraint is
+    byte-identical in DESCRIPTION after init.
+  - **Classifier unit tests** (`026`): direct tests for
+    `classify_init_description()` covering all four types plus edge cases
+    (empty repo URL, NA name, mixed valid/invalid, DCF parse failure).
+  - **Bootstrap print/JSON tests** (`025`): snapshot or regex tests for
+    `print.bootstrap_dependency_plan()` output format; JSON round-trip for
+    `as.character.bootstrap_dependency_plan()`.
+  - **Bootstrap warning tests** (`025`): unparseable user constraint,
+    looser lower bound, unbounded `>` constraint — all produce
+    `severity: "warning"` and do not set `ok = FALSE`.

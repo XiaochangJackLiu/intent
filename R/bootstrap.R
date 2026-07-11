@@ -120,9 +120,65 @@ bootstrap_dependency_conflict <- function(
   }
 
   required <- bootstrap_parse_version_constraint(required_version)
-  user <- bootstrap_parse_version_constraint(user_version)
-  if (is.null(user) || is.null(required)) {
+  if (is.null(required)) {
     return(NULL)
+  }
+
+  user <- bootstrap_parse_version_constraint(user_version)
+  if (is.null(user)) {
+    if (
+      !is.null(user_version) &&
+        !is.na(user_version) &&
+        nzchar(user_version) &&
+        !identical(user_version, "*")
+    ) {
+      return(bootstrap_dependency_issue(
+        package,
+        "warning",
+        sprintf(
+          "%s constraint '%s' could not be parsed; preserving as-is",
+          package,
+          user_version
+        )
+      ))
+    }
+    return(NULL)
+  }
+
+  # Warning: user lower bound is looser than intent's requirement
+  if (
+    identical(user$operator, ">=") &&
+      identical(required$operator, ">=")
+  ) {
+    if (utils::compareVersion(user$version, required$version) < 0) {
+      return(bootstrap_dependency_issue(
+        package,
+        "warning",
+        sprintf(
+          "%s constraint '%s' is looser than intent requirement '%s'",
+          package,
+          user_version,
+          required_version
+        )
+      ))
+    }
+  }
+
+  # Info: user strict lower bound with intent non-strict requirement
+  if (
+    identical(user$operator, ">") &&
+      identical(required$operator, ">=")
+  ) {
+    return(bootstrap_dependency_issue(
+      package,
+      "info",
+      sprintf(
+        "%s constraint '%s' uses strict lower bound; intent requirement is '%s'",
+        package,
+        user_version,
+        required_version
+      )
+    ))
   }
 
   conflicts <- FALSE

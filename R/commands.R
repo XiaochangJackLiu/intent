@@ -14,18 +14,16 @@ cmd_init <- function(
 
   stop_for_unsafe_init(classification, renv_state)
 
-  if (!dir.exists(path)) {
-    dir.create(project_dir, recursive = TRUE)
-  }
-
   desc_path <- file.path(project_dir, "DESCRIPTION")
 
-  pkg_name <- gsub("[^[:alnum:].]", ".", basename(project_dir))
-  if (grepl("^[0-9.]", pkg_name)) {
-    pkg_name <- paste0("pkg.", pkg_name)
-  }
-
-  if (!file.exists(desc_path)) {
+  if (classification$type == "missing_manifest") {
+    if (!dir.exists(path)) {
+      dir.create(project_dir, recursive = TRUE)
+    }
+    pkg_name <- gsub("[^[:alnum:].]", ".", basename(project_dir))
+    if (grepl("^[0-9.]", pkg_name)) {
+      pkg_name <- paste0("pkg.", pkg_name)
+    }
     message("Creating DESCRIPTION file...")
     rproject <- desc::description$new("!new")
     rproject$set("Package", pkg_name)
@@ -170,10 +168,8 @@ stop_for_unsafe_init <- function(classification, renv_state) {
     ),
     non_intent_manifest = stop(
       "DESCRIPTION exists but is not an intent manifest. ",
-      "Before running `intent::init()`, ensure Imports and Suggests list ",
-      "the direct dependencies to manage and add `Config/intent/repos/<NAME>` ",
-      "fields for project repositories. After the manifest is compliant, ",
-      "run `intent::status()` or `intent::verify()` to inspect the project.",
+      "Add `Config/intent/repos/<NAME>` fields to declare project repositories. ",
+      "After the manifest is compliant, run `intent::init()` again.",
       call. = FALSE
     ),
     missing_manifest = {
@@ -186,7 +182,13 @@ stop_for_unsafe_init <- function(classification, renv_state) {
         )
       }
     },
-    intent_manifest = NULL
+    intent_manifest = NULL,
+    stop(
+      "Internal error: unknown init classification '",
+      classification$type,
+      "'.",
+      call. = FALSE
+    )
   )
 
   invisible(TRUE)

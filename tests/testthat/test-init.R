@@ -89,7 +89,7 @@ test_that("init refuses existing non-intent DESCRIPTION without mutation", {
 
   expect_error(
     cmd_init(path = tmp_dir, repos = c(CRAN = "https://example.test")),
-    "intent::status\\(\\).*intent::verify\\(\\)"
+    "not an intent manifest"
   )
 
   expect_false(called)
@@ -433,4 +433,186 @@ test_that("intent::init creates necessary files", {
   expect_true(
     file.exists(file.path(tmp_dir, "renv/settings.json"))
   )
+})
+
+# classify_init_description direct unit tests
+
+test_that("classify_init_description detects intent_manifest with one named repo", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://example.com"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "intent_manifest")
+  expect_null(result$error)
+})
+
+test_that("classify_init_description detects intent_manifest with multiple repos", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://cran.example.com",
+      "Config/intent/repos/INTERNAL: https://r.example.com/packages"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "intent_manifest")
+})
+
+test_that("classify_init_description detects non_intent_manifest without config", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Imports: glue"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "non_intent_manifest")
+})
+
+test_that("classify_init_description detects non_intent_manifest with empty repo URL", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: "
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "non_intent_manifest")
+})
+
+test_that("classify_init_description detects non_intent_manifest with empty repo name", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Config/intent/repos/: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "non_intent_manifest")
+})
+
+test_that("classify_init_description fails closed on mixed valid/invalid repos", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Config/intent/repos/CRAN: https://example.test",
+      "Config/intent/repos/: https://example.test"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "non_intent_manifest")
+})
+
+test_that("classify_init_description detects missing_manifest", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "missing_manifest")
+  expect_null(result$error)
+})
+
+test_that("classify_init_description detects invalid_manifest", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines("not a valid DESCRIPTION file", file.path(tmp_dir, "DESCRIPTION"))
+
+  result <- classify_init_description(tmp_dir)
+  expect_equal(result$type, "invalid_manifest")
+  expect_true(!is.null(result$error))
+})
+
+test_that("stop_for_unsafe_init errors on unknown classification type", {
+  expect_error(
+    stop_for_unsafe_init(
+      list(type = "unknown_type", error = NULL),
+      list(renv_dir = FALSE, lockfile = FALSE)
+    ),
+    "Internal error"
+  )
+})
+
+# Integration: init preserves user bootstrap constraints byte-identically
+
+test_that("init preserves user bootstrap constraints byte-identically in DESCRIPTION", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  desc_lines <- c(
+    "Package: existing",
+    "Version: 0.0.1",
+    "Suggests:",
+    "    intent (>= 0.9.0),",
+    "    pak (>= 0.8.0),",
+    "    renv (== 1.1.4)",
+    "Config/intent/repos/CRAN: https://example.test"
+  )
+  writeLines(desc_lines, file.path(tmp_dir, "DESCRIPTION"))
+
+  mockery::stub(cmd_init, "backend_init", function(...) {})
+
+  cmd_init(path = tmp_dir, install_self = "never")
+
+  deps <- desc::desc_get_deps(file = file.path(tmp_dir, "DESCRIPTION"))
+
+  intent_row <- deps[deps$package == "intent", , drop = FALSE]
+  expect_equal(nrow(intent_row), 1)
+  expect_equal(intent_row$version[[1]], ">= 0.9.0")
+
+  pak_row <- deps[deps$package == "pak", , drop = FALSE]
+  expect_equal(nrow(pak_row), 1)
+  expect_equal(pak_row$version[[1]], ">= 0.8.0")
+
+  renv_row <- deps[deps$package == "renv", , drop = FALSE]
+  expect_equal(nrow(renv_row), 1)
+  expect_equal(renv_row$version[[1]], "== 1.1.4")
 })

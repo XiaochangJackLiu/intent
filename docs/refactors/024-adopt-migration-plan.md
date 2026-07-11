@@ -32,6 +32,12 @@ intent::init()   # safe initialization for new or already-compliant projects
 intent::adopt()  # explicit migration for existing projects
 ```
 
+## Prerequisites
+
+- `025-bootstrap-plan-ux.md` — `print()` / `as.character()` methods for
+  `bootstrap_dependency_plan` and warning-level issue support. `adopt()` dry-run
+  output depends on human-readable bootstrap plan formatting.
+
 ## Non-Goals
 
 - Do not make `init()` adopt existing projects implicitly.
@@ -241,6 +247,9 @@ the user explicitly selects or writes them into `DESCRIPTION`.
 
 ## Implementation Steps
 
+0. **Prerequisite:** Implement `print.bootstrap_dependency_plan()` and
+   `as.character.bootstrap_dependency_plan()` (`025`), plus warning-level issue
+   support in `bootstrap_dependency_conflict()`.
 1. Add an adoption plan structure and empty dataframe helpers.
 2. Implement `adoption_plan()` for `strategy = "manifest"`.
 3. Reuse `bootstrap_dependency_plan()` inside adoption planning.

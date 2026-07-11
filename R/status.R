@@ -148,3 +148,55 @@ as.character.intent_verification <- function(x, ...) {
 as.character.intent_plan <- function(x, ...) {
   jsonlite::toJSON(unclass(x), auto_unbox = TRUE, pretty = FALSE)
 }
+
+#' @export
+print.bootstrap_dependency_plan <- function(x, ...) {
+  if (nrow(x$add) > 0) {
+    cat("Add:\n")
+    for (i in seq_len(nrow(x$add))) {
+      cat(sprintf(
+        "  + %s (%s) [%s]\n",
+        x$add$package[[i]],
+        x$add$version[[i]],
+        x$add$type[[i]]
+      ))
+    }
+    cat("\n")
+  }
+
+  if (nrow(x$preserve) > 0) {
+    cat("Preserve:\n")
+    for (i in seq_len(nrow(x$preserve))) {
+      cat(sprintf(
+        "  = %s (%s) [%s]\n",
+        x$preserve$package[[i]],
+        x$preserve$version[[i]],
+        x$preserve$type[[i]]
+      ))
+    }
+    cat("\n")
+  }
+
+  if (nrow(x$issues) > 0) {
+    cat("Issues:\n")
+    for (i in seq_len(nrow(x$issues))) {
+      marker <- if (identical(x$issues$severity[[i]], "error")) "!" else "?"
+      cat(sprintf(
+        "  %s [%s] %s: %s\n",
+        marker,
+        x$issues$severity[[i]],
+        x$issues$package[[i]],
+        x$issues$message[[i]]
+      ))
+    }
+    cat("\n")
+  }
+
+  cat(sprintf("OK: %s\n", if (isTRUE(x$ok)) "TRUE" else "FALSE"))
+  invisible(x)
+}
+
+#' @export
+as.character.bootstrap_dependency_plan <- function(x, ...) {
+  jsonlite::toJSON(unclass(x), auto_unbox = TRUE, pretty = FALSE)
+}
