@@ -96,6 +96,17 @@ roadmap Phase 2 criterion.
    - `intent::sync()` with real install, snapshot, restore
    - `intent::status()` on a real project
 
+### Cross-Platform Restore Tests (`027`)
+
+See `027-cross-platform-restore.md` for design. Planned additions:
+
+- **Fixture directory:** `tests/testthat/fixtures/` with representative lockfiles
+- **Unit tests:** `repo_url_is_platform_specific()` classification, platform URL
+  detection in `verify()`, `intent_supplement_repositories()` with RSPM→CRAN
+  name mapping, unresolvable repository error
+- **CI pipeline:** Two-stage job (Linux create → Windows/macOS restore)
+- **Existing test fix:** Replace hardcoded Linux-only URL in `test-init.R:385`
+
 ### Test Quality Checklist
 
 - [x] Happy paths covered for all public commands
@@ -148,16 +159,14 @@ Fill this in after implementation.
   - Add a Codecov CI gate once coverage tooling works in the GitHub Actions
     environment.
   - Add edge-case tests for init-on-existing-project with repos (warning path).
-  - **022 + 023 integration test** (`026`): add an end-to-end test that
-    verifies the full init chain — classify → plan bootstrap → apply → write
-    DESCRIPTION → confirm that user's pre-existing `renv` constraint is
-    byte-identical in DESCRIPTION after init.
-  - **Classifier unit tests** (`026`): direct tests for
-    `classify_init_description()` covering all four types plus edge cases
-    (empty repo URL, NA name, mixed valid/invalid, DCF parse failure).
-  - **Bootstrap print/JSON tests** (`025`): snapshot or regex tests for
-    `print.bootstrap_dependency_plan()` output format; JSON round-trip for
-    `as.character.bootstrap_dependency_plan()`.
-  - **Bootstrap warning tests** (`025`): unparseable user constraint,
-    looser lower bound, unbounded `>` constraint — all produce
-    `severity: "warning"` and do not set `ok = FALSE`.
+  - **022 + 023 integration test** (`026`): done.
+  - **Classifier unit tests** (`026`): done.
+  - **Bootstrap print/JSON tests** (`025`): done.
+  - **Bootstrap warning tests** (`025`): done.
+  - **Cross-platform restore tests** (`027`): add fixture-based lockfile
+    tests in `tests/testthat/fixtures/` (platform-agnostic, RSPM-renamed,
+    platform-specific URL, unresolvable repo). Add unit tests for
+    `repo_url_is_platform_specific()`. Add cross-platform CI artifact
+    pipeline job. Fix hardcoded Linux-specific URL in `test-init.R:385`.
+  - **Adoption plan tests** (`024`): add integration test with real
+    `intent::adopt(dry_run = FALSE)` on a project with existing renv state.
