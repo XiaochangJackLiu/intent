@@ -331,3 +331,106 @@ test_that("bootstrap plan ok is FALSE only on error severity", {
   expect_false(plan2$ok)
   expect_true(any(plan2$issues$severity == "error"))
 })
+
+test_that("bootstrap_dependency_plan rejects non->= intent version", {
+  rproject <- desc::description$new("!new")
+  rproject$set("Package", "demo")
+
+  expect_error(
+    bootstrap_dependency_plan(
+      rproject,
+      versions = c(intent = "== 1.0.0", pak = NA, renv = NA)
+    ),
+    "intent version must be a '>=' constraint"
+  )
+
+  expect_error(
+    bootstrap_dependency_plan(
+      rproject,
+      versions = c(intent = "< 1.0.0", pak = NA, renv = NA)
+    ),
+    "intent version must be a '>=' constraint"
+  )
+})
+
+test_that("bootstrap_dependency_plan allows valid intent version constraints", {
+  rproject <- desc::description$new("!new")
+  rproject$set("Package", "demo")
+
+  expect_error(
+    bootstrap_dependency_plan(
+      rproject,
+      versions = c(intent = ">= 1.2.3", pak = NA, renv = NA)
+    ),
+    NA
+  )
+
+  expect_error(
+    bootstrap_dependency_plan(
+      rproject,
+      versions = c(intent = NA, pak = NA, renv = NA)
+    ),
+    NA
+  )
+
+  expect_error(
+    bootstrap_dependency_plan(
+      rproject,
+      versions = c(intent = "*", pak = NA, renv = NA)
+    ),
+    NA
+  )
+})
+
+test_that("bootstrap plan override=FALSE preserves existing constraints (manifest wins)", {
+  rproject <- desc::description$new("!new")
+  rproject$set("Package", "demo")
+  rproject$set_dep("intent", type = "Suggests", version = ">= 0.9.0")
+  rproject$set_dep("pak", type = "Suggests", version = ">= 0.8.0")
+
+  plan <- bootstrap_dependency_plan(
+    rproject,
+    versions = c(intent = ">= 1.2.3", pak = ">= 0.9.0", renv = NA),
+    override = FALSE
+  )
+
+  expect_equal(nrow(plan$add), 1) # only renv (missing)
+  expect_equal(nrow(plan$preserve), 2) # intent and pak preserved
+  expect_equal(
+    plan$preserve$version[plan$preserve$package == "intent"],
+    ">= 0.9.0"
+  )
+  expect_equal(
+    plan$preserve$version[plan$preserve$package == "pak"],
+    ">= 0.8.0"
+  )
+})
+
+test_that("bootstrap plan override=TRUE overrides existing constraints with versions", {
+  rproject <- desc::description$new("!new")
+  rproject$set("Package", "demo")
+  rproject$set_dep("intent", type = "Suggests", version = ">= 0.9.0")
+  rproject$set_dep("pak", type = "Suggests", version = ">= 0.8.0")
+
+  plan <- bootstrap_dependency_plan(
+    rproject,
+    versions = c(intent = ">= 1.2.3", pak = ">= 0.9.0", renv = NA),
+    override = TRUE
+  )
+
+  # intent: existing >= 0.9.0 vs versions >= 1.2.3 -> override
+  # pak: existing >= 0.8.0 vs versions >= 0.9.0 -> override
+  # renv: missing -> add
+  expect_equal(nrow(plan$add), 3)
+  expect_equal(nrow(plan$preserve), 0)
+
+  add_intent <- plan$add[plan$add$package == "intent", ]
+  expect_equal(add_intent$version, ">= 1.2.3")
+
+  add_pak <- plan$add[plan$add$package == "pak", ]
+  expect_equal(add_pak$version, ">= 0.9.0")
+
+  # Should have info issues about overrides
+  expect_true(any(grepl("overrides existing", plan$issues$message)))
+  expect_true(plan$ok)
+})

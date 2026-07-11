@@ -295,13 +295,17 @@ Add focused unit tests for bootstrap planning:
     intent requires `>= 1.5.0` — not a conflict but worth noting). The `severity`
     column exists in the `issues` data frame but `"warning"` is never written.
     `ok` should check `severity == "error"` explicitly, not `any(issues)`.
-  - **Input validation**: `bootstrap_dependency_plan()` does not validate its
+  - **Input validation** (`025`): `bootstrap_dependency_plan()` does not validate its
     `versions` argument. A caller could inject an exact pin for `intent`
     (e.g. `c(intent = "== 1.0.0")`), contradicting the lower-bound policy.
     Add lightweight validation that `intent`'s version is a `>=` constraint.
+    → **Done**: `bootstrap_validate_versions()` rejects non-`>=` intent versions.
+    Also added `override` parameter so `adopt()` can opt into overriding
+    existing manifest constraints.
   - **Temp DESCRIPTION robustness**: `bootstrap_metadata_deps()` writes a minimal
     temp DESCRIPTION that omits the required `Title` field. While `desc` currently
     tolerates this, it is fragile against future `desc` package changes. Add
     `Title: Internal Bootstrap Metadata Parser` to the temp file.
+    → **Done**.
   - Reuse the bootstrap plan in a future `adopt()` dry-run output
     and decide whether to expose a user-facing plan print method (`024`, `025`).
