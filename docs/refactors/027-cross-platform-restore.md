@@ -244,10 +244,10 @@ test_that("init warns on platform-specific repo URL", {
    platform-specific URLs.~~ **Done** (`c0b5578`).
 4. Add `adopt_check_repo_urls()` to `adopt_build_issues()` so `adopt()`
    reports platform-specific URLs in dry-run output.
-5. Add fixture lockfiles to `tests/testthat/fixtures/`.
-6. Add tests for platform URL detection, verification issues, and
-   supplement resolution.
-7. Fix the hardcoded Linux-specific URL in `test-init.R:385`.
+5. ~~Add fixture lockfiles to `tests/testthat/fixtures/`.~~ **Done** (`19f4b70`).
+6. ~~Add tests for platform URL detection, verification issues, and
+   supplement resolution.~~ **Done** (`19f4b70`, `3b8f48c`).
+7. ~~Fix the hardcoded Linux-specific URL in `test-init.R:385`.~~ **Done** (`c0b5578`).
 8. Update `016-testing-plan.md` with cross-platform test entries.
 9. (Separate) Add cross-platform CI artifact pipeline to GitHub Actions.
 
