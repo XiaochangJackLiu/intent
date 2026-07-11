@@ -709,7 +709,7 @@ intent_verify_lockfile_repo_resolvability <- function(lock, repos) {
       next
     }
 
-    # Direct name match — resolvable
+    # Direct name match -- resolvable
     if (repo %in% repo_names) {
       next
     }
@@ -836,7 +836,7 @@ intent_check_repository_policy <- function(row, repos) {
     return(intent_source_violations_empty())
   }
 
-  # Case 3: Undeclared name — resolve against declared URLs via the
+  # Case 3: Undeclared name -- resolve against declared URLs via the
   # package's own repository_url.  Covers PPM (RSPM) and any future
   # repository name that resolves to a declared URL.
   if (
@@ -920,7 +920,7 @@ intent_check_platform_repos <- function(repos, source_policy) {
 
 # Repository names that renv lockfile package records may contain even
 # when the user declared the same source under a different name.  Used
-# only to generate informative messages — never for silent behaviour
+# only to generate informative messages -- never for silent behaviour
 # changes.  PPM's PACKAGES file reports Repository: RSPM regardless of
 # how the user names the repository in Config/intent/repos.
 INTENT_KNOWN_PPM_NAMES <- c("RSPM")
