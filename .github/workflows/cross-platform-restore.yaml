@@ -1,6 +1,11 @@
 # Cross-platform lockfile restoration test.
-# Creates a lockfile on Linux, then restores it on Windows and macOS.
+# Creates a lockfile on Linux, then restores it on macOS.
 # Verifies that intent::sync() works across platforms.
+#
+# Note: Restore only runs on macOS (not Windows) because Windows runners
+# experience segfaults with R CMD INSTALL of the intent package due to
+# compiled code in pak/renv dependencies. R-CMD-check separately covers
+# Windows. macOS serves as the representative non-Linux platform.
 
 on:
   push:
@@ -58,14 +63,8 @@ jobs:
 
   restore-lockfile:
     needs: create-lockfile
-    runs-on: ${{ matrix.os }}
-    name: Restore (${{ matrix.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            name: macos
+    runs-on: macos-latest
+    name: Restore (macos)
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +76,9 @@ jobs:
         with:
           extra-packages: any::devtools
           needs: check
+
+      - name: Install intent
+        run: R CMD INSTALL .
 
       - name: Download lockfile artifact
         uses: actions/download-artifact@v4
@@ -95,7 +97,7 @@ jobs:
           cp renv.lock "$PROJECT_DIR/"
           cp DESCRIPTION "$PROJECT_DIR/"
           Rscript -e "
-            devtools::load_all()
+            library(intent)
             cat('Pre-restore verification:\n')
             result <- intent::verify(project = '$PROJECT_DIR')
             print(result)
