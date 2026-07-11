@@ -427,6 +427,8 @@ checking is turned off.
 | Missing `renv` or `pak` | `"The following required packages are missing: ..."` | Install `renv` and `pak` first |
 | No repositories configured and defaults disabled | `"No repositories configured. Pass repos = ..."` | Pass `repos = c(NAME = "URL")`, use `intent init --repo NAME=URL`, or add `Config/intent/repos/` fields |
 | Source policy violation | `"Source policy violation..."` | Update `Config/intent/source-policy/*`, use an allowed package source, or declare the repository under `Config/intent/repos/` |
+| Platform-specific repository URL | `"uses a platform-specific URL"` | Replace with a platform-agnostic URL (e.g. `/cran/latest` instead of `/cran/__linux__/...`) |
+| Lockfile repository not declared | `"references repository 'X' which is not declared"` | Add the repository name and URL to `Config/intent/repos/` in DESCRIPTION |
 
 ---
 
@@ -651,7 +653,12 @@ chosen package source.
 3. Check that locked packages are installed.
 4. Check that lockfile repositories match `Config/intent/repos/`.
 5. Check source policy violations.
-6. Check for lockfile packages outside the dependency closure rooted at
+6. Check that every lockfile package's Repository name is resolvable against
+   declared `Config/intent/repos/` entries (via direct name match, URL match, or
+   lockfile `R$Repositories` URL match).
+7. Check that repository URLs are platform-agnostic (no `__linux__`,
+   `__macos__`, or `manylinux` segments) to ensure cross-platform restore safety.
+8. Check for lockfile packages outside the dependency closure rooted at
    `DESCRIPTION` dependencies and bootstrap packages.
 
 * **Exit State:** No files or packages are changed. Returns an
@@ -666,6 +673,7 @@ chosen package source.
 | Function | Primary Tool | Target File | Impact |
 | --- | --- | --- | --- |
 | `init` | `renv` | `.Rprofile` | Environment Architecture |
+| `adopt` | `desc` + `renv` | `DESCRIPTION` | Migration |
 | `add` | `desc` + `pak` | `DESCRIPTION` | Manifest & Library |
 | `remove` | `desc` + `renv` | `DESCRIPTION` | Manifest & Library |
 | `sync` | `renv` + `pak` | `renv.lock` | Library State |
