@@ -100,12 +100,12 @@ roadmap Phase 2 criterion.
 
 See `027-cross-platform-restore.md` for design. Planned additions:
 
-- **Fixture directory:** `tests/testthat/fixtures/` with representative lockfiles
-- **Unit tests:** `repo_url_is_platform_specific()` classification, platform URL
+- [x] **Fixture directory:** `tests/testthat/fixtures/` with representative lockfiles
+- [x] **Unit tests:** `repo_url_is_platform_specific()` classification, platform URL
   detection in `verify()`, `intent_supplement_repositories()` with RSPM→CRAN
   name mapping, unresolvable repository error
-- **CI pipeline:** Two-stage job (Linux create → Windows/macOS restore)
-- **Existing test fix:** Replace hardcoded Linux-only URL in `test-init.R:385`
+- [x] **Existing test fix:** Replace hardcoded Linux-only URL in `test-init.R:385`
+- [ ] **CI pipeline:** Two-stage job (Linux create → Windows/macOS restore)
 
 ### Test Quality Checklist
 

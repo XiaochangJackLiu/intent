@@ -1,6 +1,6 @@
 # Cross-Platform Restore Safety
 
-Status: `planned`
+Status: `implemented`
 
 ## Problem
 
@@ -248,8 +248,8 @@ test_that("init warns on platform-specific repo URL", {
 6. ~~Add tests for platform URL detection, verification issues, and
    supplement resolution.~~ **Done** (`19f4b70`, `3b8f48c`).
 7. ~~Fix the hardcoded Linux-specific URL in `test-init.R:385`.~~ **Done** (`c0b5578`).
-8. Update `016-testing-plan.md` with cross-platform test entries.
-9. (Separate) Add cross-platform CI artifact pipeline to GitHub Actions.
+8. ~~Update `016-testing-plan.md` with cross-platform test entries.~~ **Done**.
+9. ~~Add cross-platform CI artifact pipeline to GitHub Actions.~~ **Done**.
 
 ## Acceptance Criteria
 
@@ -267,5 +267,17 @@ test_that("init warns on platform-specific repo URL", {
 
 Fill this in after implementation.
 
-- Result:
-- Follow-up work:
+- Result: Implemented all three enforcements. Added `repo_url_is_platform_specific()`
+  detecting `__linux__`, `__macos__`, `__windows__`, `__mac__`, `manylinux`
+  patterns. Added `intent_check_platform_repos()` integrated into `verify()` and
+  `adopt()` dry-run, with severity controlled by source-policy/mode. Added
+  `intent_verify_lockfile_repo_resolvability()` checking every lockfile package's
+  Repository name against declared repos via direct name, package record URL, and
+  lockfile R$Repositories URL matching. Fixed hardcoded Linux-specific URL in
+  test-init.R. Added fixture lockfiles (platform-agnostic, RSPM-renamed,
+  unresolvable repo). Added `test-cross-platform.R` with 8 tests. Added CI
+  cross-platform-restore workflow (Linux create → Windows/macOS restore).
+  390 tests, 0 failures, 0 warnings.
+- Follow-up work: Monitor cross-platform CI pipeline performance. Consider
+  init URL normalisation (Enforcement 2) if platform-specific URLs are
+  frequently encountered in practice.

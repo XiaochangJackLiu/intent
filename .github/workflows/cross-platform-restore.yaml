@@ -1,0 +1,114 @@
+# Cross-platform lockfile restoration test.
+# Creates a lockfile on Linux, then restores it on Windows and macOS.
+# Verifies that intent::sync() works across platforms.
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main]
+
+name: cross-platform-restore
+
+permissions: read-all
+
+jobs:
+  create-lockfile:
+    runs-on: ubuntu-latest
+    name: Create lockfile (ubuntu)
+    outputs:
+      project-dir: ${{ steps.create.outputs.project_dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools, any::dplyr
+          needs: check
+
+      - name: Create intent project and generate lockfile
+        id: create
+        run: |
+          PROJECT_DIR=$(mktemp -d)
+          export PROJECT_DIR
+          echo "project_dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+          Rscript -e '
+            devtools::load_all()
+            intent::init(
+              path = Sys.getenv("PROJECT_DIR"),
+              repos = c(CRAN = "https://packagemanager.posit.co/cran/latest"),
+              install_self = "never"
+            )
+            intent::add("dplyr")
+          '
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockfile-linux
+          path: ${{ steps.create.outputs.project_dir }}/renv.lock
+
+      - name: Upload DESCRIPTION
+        uses: actions/upload-artifact@v4
+        with:
+          name: description-linux
+          path: ${{ steps.create.outputs.project_dir }}/DESCRIPTION
+
+  restore-lockfile:
+    needs: create-lockfile
+    runs-on: ${{ matrix.os }}
+    name: Restore (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools
+          needs: check
+
+      - name: Download lockfile artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lockfile-linux
+
+      - name: Download DESCRIPTION artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: description-linux
+
+      - name: Restore project from Linux lockfile
+        run: |
+          PROJECT_DIR=$(mktemp -d)
+          export PROJECT_DIR
+          cp renv.lock "$PROJECT_DIR/"
+          cp DESCRIPTION "$PROJECT_DIR/"
+          Rscript -e '
+            devtools::load_all()
+            cat("Pre-restore verification:\n")
+            result <- intent::verify(project = Sys.getenv("PROJECT_DIR"))
+            print(result)
+            intent::sync(project = Sys.getenv("PROJECT_DIR"))
+            lib <- renv::paths$library(project = Sys.getenv("PROJECT_DIR"))
+            pkgs <- basename(list.dirs(lib, recursive = FALSE))
+            cat("Library packages:", paste(pkgs, collapse = ", "), "\n")
+            if (!"dplyr" %in% pkgs) {
+              stop("dplyr not found in project library after sync.")
+            }
+            cat("Cross-platform restore successful on", Sys.info()["sysname"], "\n")
+          '
