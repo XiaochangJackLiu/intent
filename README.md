@@ -27,6 +27,7 @@ In standard R, keeping your `DESCRIPTION` file, your installed packages, and you
 | Action | Standard R (Manual) | R (**`intent`**) |
 | --- | --- | --- |
 | **Initialize** | Create `DESCRIPTION` manually, run `renv::init()`, configure settings | `intent::init()` |
+| **Adopt Existing** | Manual migration | `intent::adopt()` |
 | **Add Dependency** | Edit `DESCRIPTION`, run `install.packages()`, run `renv::snapshot()` | `intent::add("pkg")` |
 | **Remove Dependency** | Edit `DESCRIPTION`, run `remove.packages()`, run `renv::snapshot()` | `intent::remove("pkg")` |
 | **Sync Environment** | Run `renv::restore()`, manually check consistency | `intent::sync()` |
@@ -198,6 +199,29 @@ intent-compliant `DESCRIPTION`, as an `intent` project.
   from your active library paths into the project library when possible, without
   assuming a remote source such as GitHub, CRAN, or R-universe.
 * Use `install_self = "never"` if you want `intent` to remain an external tool.
+
+### `intent::adopt(path, repos, strategy = "manifest", dry_run = TRUE, install_self = "hydrate")`
+
+Adopts an existing R project into intent management. Unlike `init()`, which
+creates brand-new projects or requires an intent-compliant DESCRIPTION,
+`adopt()` converts a project that already has a DESCRIPTION and optionally an
+existing `renv.lock` into an intent-managed project.
+
+* **Default is non-mutating:** returns an `adoption_plan` that describes what
+  would change. Pass `dry_run = FALSE` to apply changes.
+* **Strategy `"manifest"`** (default): treats the existing `DESCRIPTION` as the
+  source of direct dependency intent. Adds missing `Config/intent/repos/*`
+  fields, bootstrap tool dependencies (`intent`, `pak`, `renv`), and
+  `.Renviron` configuration. Reports packages in `renv.lock` that are not
+  declared in `DESCRIPTION`.
+* **Strategy `"lockfile-assisted"`**: also reads `renv.lock` to identify
+  candidate dependencies for review.
+* Validates that repository URLs are platform-agnostic, warns on
+  platform-specific URLs that would break cross-platform restore.
+* Writes `RENV_CONFIG_PAK_ENABLED = TRUE` to `.Renviron` when missing.
+* Sets `renv` snapshot type to `"explicit"`.
+* Self-hydrates `intent` by default (`install_self = "hydrate"`).
+* CLI: `intent adopt [path] [--repo NAME=URL] [--strategy name] [--apply] [--yes]`
 
 ### `intent::add(pkgs, dev = FALSE, dry_run = FALSE)`
 
