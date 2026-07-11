@@ -362,6 +362,10 @@ intent_verify_project_issues <- function(project, status) {
   )
   issues <- rbind(
     issues,
+    intent_verify_lockfile_repo_resolvability(lock, repos)
+  )
+  issues <- rbind(
+    issues,
     intent_verify_lockfile_closure_issues(
       lock,
       roots = c(status$manifest_packages, "intent", "pak", "renv")
@@ -687,6 +691,84 @@ intent_verify_lockfile_closure_issues <- function(lock, roots) {
       paste(zombies, collapse = ", ")
     )
   )
+}
+
+intent_verify_lockfile_repo_resolvability <- function(lock, repos) {
+  packages <- lock$Packages %||% list()
+  if (length(packages) == 0) {
+    return(intent_verification_issues_empty())
+  }
+
+  issues <- intent_verification_issues_empty()
+  repo_names <- names(repos)
+
+  for (pkg_name in names(packages)) {
+    record <- packages[[pkg_name]]
+    repo <- record[["Repository"]]
+    if (is.null(repo) || is.na(repo) || !nzchar(repo)) {
+      next
+    }
+
+    # Direct name match — resolvable
+    if (repo %in% repo_names) {
+      next
+    }
+
+    # URL-match via package record's own URL fields
+    record_url <- intent_lock_record_repository_url(record)
+    if (!is.na(record_url) && nzchar(record_url)) {
+      norm_record_url <- normalize_repo_url(record_url)
+      url_matched <- FALSE
+      for (decl_name in repo_names) {
+        if (
+          identical(normalize_repo_url(repos[[decl_name]]), norm_record_url)
+        ) {
+          url_matched <- TRUE
+          break
+        }
+      }
+      if (url_matched) {
+        next
+      }
+    }
+
+    # URL-match via lockfile R$Repositories entry for this repo name
+    lock_repos <- lock$R$Repositories %||% character()
+    if (repo %in% names(lock_repos)) {
+      lock_repo_url <- lock_repos[[repo]]
+      if (!is.na(lock_repo_url) && nzchar(lock_repo_url)) {
+        norm_lock_url <- normalize_repo_url(lock_repo_url)
+        url_matched <- FALSE
+        for (decl_name in repo_names) {
+          if (
+            identical(normalize_repo_url(repos[[decl_name]]), norm_lock_url)
+          ) {
+            url_matched <- TRUE
+            break
+          }
+        }
+        if (url_matched) {
+          next
+        }
+      }
+    }
+
+    # Unresolvable
+    issues <- rbind(
+      issues,
+      intent_verification_issue(
+        "lockfile_repo_resolvability",
+        "error",
+        sprintf(
+          "Package '%s' references repository '%s' which is not declared in Config/intent/repos",
+          pkg_name,
+          repo
+        )
+      )
+    )
+  }
+
+  issues
 }
 
 intent_source_violation <- function(package, source, repository, reason) {

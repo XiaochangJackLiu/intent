@@ -67,3 +67,95 @@ test_that("intent_supplement_repositories resolves RSPM via URL matching with fi
     "https://packagemanager.posit.co/cran/latest"
   )
 })
+
+test_that("fixture: unresolvable repo name is detected as verification issue", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  file.copy(
+    file.path("fixtures", "lockfile-unresolvable-repo.json"),
+    file.path(tmp_dir, "renv.lock")
+  )
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Imports: mypkg",
+      "Config/intent/repos/CRAN: https://packagemanager.posit.co/cran/latest"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- cmd_verify(project = tmp_dir)
+
+  # Should have a lockfile_repo_resolvability issue for UnknownRepo
+  resolvability_issues <- result$issues[
+    result$issues$check == "lockfile_repo_resolvability",
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(resolvability_issues) > 0)
+  expect_match(resolvability_issues$message[[1]], "UnknownRepo")
+})
+
+test_that("lockfile_repo_resolvability: resolvable repo name passes", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  file.copy(
+    file.path("fixtures", "lockfile-platform-agnostic.json"),
+    file.path(tmp_dir, "renv.lock")
+  )
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Imports: glue",
+      "Config/intent/repos/CRAN: https://packagemanager.posit.co/cran/latest"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- cmd_verify(project = tmp_dir)
+
+  resolvability_issues <- result$issues[
+    result$issues$check == "lockfile_repo_resolvability",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(nrow(resolvability_issues), 0)
+})
+
+test_that("lockfile_repo_resolvability: RSPM resolves via URL match to CRAN", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  file.copy(
+    file.path("fixtures", "lockfile-rspm-name.json"),
+    file.path(tmp_dir, "renv.lock")
+  )
+
+  writeLines(
+    c(
+      "Package: testpkg",
+      "Version: 0.0.1",
+      "Imports: dplyr",
+      "Config/intent/repos/CRAN: https://packagemanager.posit.co/cran/latest"
+    ),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
+  result <- cmd_verify(project = tmp_dir)
+
+  resolvability_issues <- result$issues[
+    result$issues$check == "lockfile_repo_resolvability",
+    ,
+    drop = FALSE
+  ]
+  expect_equal(nrow(resolvability_issues), 0)
+})
