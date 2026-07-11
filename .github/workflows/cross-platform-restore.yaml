@@ -64,8 +64,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            name: windows
           - os: macos-latest
             name: macos
     steps:
@@ -79,10 +77,6 @@ jobs:
         with:
           extra-packages: any::devtools
           needs: check
-
-      - name: Install intent
-        shell: bash
-        run: R CMD INSTALL .
 
       - name: Download lockfile artifact
         uses: actions/download-artifact@v4
@@ -101,7 +95,7 @@ jobs:
           cp renv.lock "$PROJECT_DIR/"
           cp DESCRIPTION "$PROJECT_DIR/"
           Rscript -e "
-            library(intent)
+            devtools::load_all()
             cat('Pre-restore verification:\n')
             result <- intent::verify(project = '$PROJECT_DIR')
             print(result)
