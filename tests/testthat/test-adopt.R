@@ -220,6 +220,15 @@ test_that("adopt_build_candidates produces correct data frame", {
 })
 
 test_that("adopt_build_issues reports lockfile drift", {
+  tmp_dir <- tempfile()
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE))
+
+  writeLines(
+    c("Package: tp", "Version: 0.0.1"),
+    file.path(tmp_dir, "DESCRIPTION")
+  )
+
   bootstrap_plan <- bootstrap_dependency_plan(
     desc::description$new("!new")$set("Package", "tp"),
     versions = c(intent = ">= 1.0.0", pak = NA, renv = NA)
@@ -230,7 +239,14 @@ test_that("adopt_build_issues reports lockfile drift", {
     in_lockfile_not_manifest = c("dplyr"),
     in_manifest_not_lockfile = c("glue")
   )
-  issues <- adopt_build_issues(bootstrap_plan, comparison, "manifest", FALSE)
+  issues <- adopt_build_issues(
+    bootstrap_plan,
+    comparison,
+    "manifest",
+    FALSE,
+    effective_repos = c(CRAN = "https://cran.example.com"),
+    desc_path = file.path(tmp_dir, "DESCRIPTION")
+  )
 
   lockfile_issues <- issues[issues$area == "lockfile", , drop = FALSE]
   expect_true(nrow(lockfile_issues) > 0)

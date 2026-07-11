@@ -257,7 +257,14 @@ adopt_check_renviron <- function(project_dir) {
   any(grepl("RENV_CONFIG_PAK_ENABLED", readLines(renviron_path)))
 }
 
-adopt_build_issues <- function(bootstrap_plan, comparison, strategy, confirm) {
+adopt_build_issues <- function(
+  bootstrap_plan,
+  comparison,
+  strategy,
+  confirm,
+  effective_repos,
+  desc_path
+) {
   issues <- adoption_issues_empty()
 
   # Bootstrap issues
@@ -291,6 +298,22 @@ adopt_build_issues <- function(bootstrap_plan, comparison, strategy, confirm) {
         )
       )
     )
+  }
+
+  # Platform-specific repository URL check
+  source_policy <- get_source_policy(desc_path)
+  platform_issues <- intent_check_platform_repos(effective_repos, source_policy)
+  if (nrow(platform_issues) > 0) {
+    for (i in seq_len(nrow(platform_issues))) {
+      issues <- rbind(
+        issues,
+        adoption_issue(
+          "platform_repos",
+          platform_issues$severity[[i]],
+          platform_issues$message[[i]]
+        )
+      )
+    }
   }
 
   issues
@@ -339,7 +362,14 @@ adopt_build_plan <- function(
     has_renviron_pak
   )
 
-  issues <- adopt_build_issues(bootstrap_plan, comparison, strategy, confirm)
+  issues <- adopt_build_issues(
+    bootstrap_plan,
+    comparison,
+    strategy,
+    confirm,
+    effective_repos,
+    file.path(project_dir, "DESCRIPTION")
+  )
 
   candidates <- adopt_build_candidates(comparison, strategy, confirm)
 
