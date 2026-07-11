@@ -40,7 +40,7 @@ jobs:
             devtools::load_all()
             intent::init(
               path = '$PROJECT_DIR',
-              repos = c(CRAN = 'https://packagemanager.posit.co/cran/latest'),
+              repos = c(CRAN = 'https://packagemanager.posit.co/cran/latest', RSPM = 'https://packagemanager.posit.co/cran/latest'),
               install_self = 'never'
             )
             intent::add('dplyr')
