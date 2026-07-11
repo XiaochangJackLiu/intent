@@ -125,17 +125,36 @@ cli_verify <- function(args) {
 }
 
 cli_adopt <- function(args) {
-  parsed <- cli_parse_common(args)
-  if (length(parsed$args) > 0) {
-    stop("`intent adopt` does not accept positional arguments.", call. = FALSE)
+  parsed <- cli_collect_repos(args)
+  path <- "."
+  if (length(parsed$args) > 1) {
+    stop("`intent adopt` accepts at most one path argument.", call. = FALSE)
+  }
+  if (length(parsed$args) == 1) {
+    path <- parsed$args
+  }
+
+  dry_run <- !isTRUE(parsed$apply)
+  strategy <- parsed$strategy %||% "manifest"
+  if (!strategy %in% c("manifest", "lockfile-assisted")) {
+    stop(
+      "Unknown strategy: ",
+      strategy,
+      ". ",
+      "Use 'manifest' or 'lockfile-assisted'.",
+      call. = FALSE
+    )
   }
 
   result <- cmd_adopt(
-    path = parsed$project %||% ".",
-    dry_run = parsed$dry_run
+    path = parsed$project %||% path,
+    repos = parsed$repos,
+    strategy = strategy,
+    dry_run = !isTRUE(parsed$apply),
+    confirm = !isTRUE(parsed$yes)
   )
 
-  if (parsed$json) {
+  if (isTRUE(parsed$json)) {
     cat(as.character(result), "\n", sep = "")
   } else {
     print(result)
@@ -196,6 +215,11 @@ cli_collect_repos <- function(args) {
   rest <- character()
   yes <- FALSE
   no_default_repo <- FALSE
+  strategy <- NULL
+  project <- NULL
+  dry_run <- FALSE
+  json <- FALSE
+  apply <- FALSE
   i <- 1
 
   while (i <= length(args)) {
@@ -206,6 +230,27 @@ cli_collect_repos <- function(args) {
       }
       repo <- cli_parse_repo(args[[i + 1]])
       repos[names(repo)] <- repo
+      i <- i + 2
+    } else if (identical(arg, "--strategy")) {
+      if (i == length(args)) {
+        stop("Missing value for --strategy.", call. = FALSE)
+      }
+      strategy <- args[[i + 1]]
+      i <- i + 2
+    } else if (identical(arg, "--apply")) {
+      apply <- TRUE
+      i <- i + 1
+    } else if (identical(arg, "--dry-run")) {
+      dry_run <- TRUE
+      i <- i + 1
+    } else if (identical(arg, "--json")) {
+      json <- TRUE
+      i <- i + 1
+    } else if (identical(arg, "--project")) {
+      if (i == length(args)) {
+        stop("Missing value for --project.", call. = FALSE)
+      }
+      project <- args[[i + 1]]
       i <- i + 2
     } else if (identical(arg, "--yes")) {
       yes <- TRUE
@@ -225,7 +270,12 @@ cli_collect_repos <- function(args) {
     args = rest,
     repos = if (length(repos) == 0) NULL else repos,
     yes = yes,
-    no_default_repo = no_default_repo
+    no_default_repo = no_default_repo,
+    strategy = strategy,
+    project = project,
+    dry_run = dry_run,
+    json = json,
+    apply = apply
   )
 }
 
@@ -251,7 +301,7 @@ cli_print_help <- function() {
       "  intent status [--project path] [--json]",
       "  intent verify [--project path] [--json]",
       "  intent doctor [--project path] [--json]",
-      "  intent adopt [--project path] [--dry-run] [--json]",
+      "  intent adopt [path] [--repo NAME=URL] [--strategy name] [--apply] [--json] [--yes]",
       sep = "\n"
     ),
     "\n"
