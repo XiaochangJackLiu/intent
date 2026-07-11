@@ -481,3 +481,45 @@ cmd_verify <- function(project = NULL) {
     status = current_status
   )
 }
+
+cmd_adopt <- function(
+  path = ".",
+  repos = NULL,
+  strategy = c("manifest", "lockfile-assisted"),
+  dry_run = TRUE,
+  install_self = "hydrate",
+  confirm = interactive()
+) {
+  strategy <- match.arg(strategy)
+  install_self <- match.arg(install_self, c("hydrate", "never"))
+
+  project_dir <- normalizePath(
+    path.expand(path),
+    winslash = "/",
+    mustWork = FALSE
+  )
+  desc_path <- file.path(project_dir, "DESCRIPTION")
+
+  adopt_validate_manifest(desc_path)
+
+  rproject <- desc::description$new(desc_path)
+
+  current_repos <- get_repos(desc_path)
+  effective_repos <- adopt_resolve_repos(current_repos, repos)
+
+  plan <- adopt_build_plan(
+    project_dir = project_dir,
+    rproject = rproject,
+    strategy = strategy,
+    effective_repos = effective_repos,
+    confirm = confirm
+  )
+
+  if (dry_run) {
+    return(plan)
+  }
+
+  adopt_apply_plan(plan, project_dir, rproject, effective_repos, install_self)
+
+  invisible(plan)
+}

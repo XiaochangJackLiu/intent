@@ -200,3 +200,88 @@ print.bootstrap_dependency_plan <- function(x, ...) {
 as.character.bootstrap_dependency_plan <- function(x, ...) {
   jsonlite::toJSON(unclass(x), auto_unbox = TRUE, pretty = FALSE)
 }
+
+#' @export
+print.adoption_plan <- function(x, ...) {
+  cat("Adoption plan for ", x$project, "\n", sep = "")
+  cat("Strategy: ", x$strategy, "\n\n", sep = "")
+
+  if (nrow(x$actions) > 0) {
+    add_rows <- x$actions[x$actions$action == "add", , drop = FALSE]
+    preserve_rows <- x$actions[x$actions$action == "preserve", , drop = FALSE]
+
+    if (nrow(add_rows) > 0) {
+      cat("Actions:\n")
+      for (i in seq_len(nrow(add_rows))) {
+        cat(
+          "  + add ",
+          add_rows$target[[i]],
+          if (nzchar(add_rows$detail[[i]])) paste(" =", add_rows$detail[[i]]),
+          "\n",
+          sep = ""
+        )
+      }
+    }
+
+    if (nrow(preserve_rows) > 0) {
+      cat("\nPreserved:\n")
+      for (i in seq_len(nrow(preserve_rows))) {
+        cat(
+          "  = ",
+          preserve_rows$target[[i]],
+          " (",
+          preserve_rows$detail[[i]],
+          ")\n",
+          sep = ""
+        )
+      }
+    }
+    cat("\n")
+  }
+
+  if (nrow(x$issues) > 0) {
+    cat("Issues:\n")
+    for (i in seq_len(nrow(x$issues))) {
+      marker <- if (identical(x$issues$severity[[i]], "error")) "!" else "?"
+      cat(
+        "  ",
+        marker,
+        " [",
+        x$issues$area[[i]],
+        "] ",
+        x$issues$message[[i]],
+        "\n",
+        sep = ""
+      )
+    }
+    cat("\n")
+  }
+
+  if (nrow(x$candidates) > 0) {
+    cat("Candidates:\n")
+    for (i in seq_len(nrow(x$candidates))) {
+      cat(
+        "  ? ",
+        x$candidates$package[[i]],
+        " (",
+        x$candidates$source[[i]],
+        ")",
+        " — ",
+        x$candidates$reason[[i]],
+        "\n",
+        sep = ""
+      )
+    }
+    cat("\n")
+  }
+
+  cat("OK: ", if (isTRUE(x$ok)) "TRUE" else "FALSE", "\n", sep = "")
+  invisible(x)
+}
+
+#' @export
+as.character.adoption_plan <- function(x, ...) {
+  out <- unclass(x)
+  out$bootstrap <- unclass(out$bootstrap)
+  jsonlite::toJSON(out, auto_unbox = TRUE, pretty = FALSE)
+}

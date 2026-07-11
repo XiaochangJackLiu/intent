@@ -1,6 +1,6 @@
 # Adopt Migration Plan
 
-Status: `planned`
+Status: `implemented`
 
 ## Problem
 
@@ -317,7 +317,20 @@ Add focused tests for:
 
 ## Result / Follow-Up Notes
 
-Fill this in after implementation.
-
-- Result:
+- Result: Implemented `intent::adopt()` with MVP scope. Added `R/adopt-core.R`
+  (S3 class `adoption_plan`, plan builder, apply logic), `R/adopt.R` (public
+  wrapper), `cmd_adopt()` in `R/commands.R` (dispatcher with dry_run/apply
+  modes), `cli_adopt()` in `R/cli.R` (CLI entry point), `print.adoption_plan()`
+  and `as.character.adoption_plan()` in `R/status.R`. The `"manifest"` strategy
+  validates DESCRIPTION existence, resolves repos (caller-provided >
+  DESCRIPTION > error), builds a bootstrap plan with `override = TRUE`, compares
+  DESCRIPTION against lockfile, checks `.Renviron`, and produces a structured
+  `adoption_plan` with actions/issues/candidates. Apply mode writes repos,
+  applies bootstrap deps, writes DESCRIPTION, configures `.Renviron`, sets
+  `renv` snapshot type to explicit, hydrates intent, and syncs. 29 focused
+  tests cover dry-run, apply mode, edge cases, and print format.
 - Follow-up work:
+  - Implement interactive candidate selection for `strategy = "lockfile-assisted"`
+    when `confirm = TRUE`.
+  - Add CLI flags for `--repos`, `--strategy`, `--yes` to `cli_adopt()`.
+  - Add `intent::adopt()` to README documentation and pkgdown site.

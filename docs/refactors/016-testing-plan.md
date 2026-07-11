@@ -142,7 +142,7 @@ Fill this in after implementation.
   coverage via covr (run in clean session via `tools/run_coverage.R`). Filled
   the three high-priority gaps: added unit tests for `intent_sync_project()`,
   `intent_get_project_deps()`, and `cli_print_help()`. Test suite now has
-  339 tests (0 failures). Documented the split between unit tests (fast, no
+  368 tests (0 failures). Documented the split between unit tests (fast, no
   network) and integration tests (real `renv`/`pak` operations).
 - Follow-up work:
   - Add a Codecov CI gate once coverage tooling works in the GitHub Actions
