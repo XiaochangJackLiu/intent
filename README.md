@@ -547,6 +547,18 @@ A project ready for `intent::add()`. If self-hydration succeeds,
 the project is still initialized and `intent` can be installed from the user's
 chosen package source.
 
+Files created or modified by `init()`:
+
+* `DESCRIPTION` — project manifest with `Config/intent/repos/*` fields
+* `renv.lock` — exact dependency versions (in "explicit" snapshot mode)
+* `renv/` — `renv` infrastructure (activation scripts, settings)
+* `.Rprofile` — sources `renv/activate.R` to auto-load the project library
+* `.Renviron` — sets `RENV_CONFIG_PAK_ENABLED = TRUE`
+* `.Rbuildignore` — created by `renv::init()` when `DESCRIPTION` contains a
+  `Package` field; adds `^renv$` and `^renv.lock$` so these files are excluded
+  from `R CMD build`. This is standard `renv` behaviour and is harmless for
+  non-package projects.
+
 ---
 
 ## 2. `intent::add()`
@@ -570,6 +582,12 @@ chosen package source.
    then replace the official `renv.lock` only if policy allows it.
 
 * **Exit State:** Package is in `DESCRIPTION`, installed in `renv/library`, and recorded in `renv.lock`.
+
+* **Version Constraints:** `add()` records the installed version as a `>=`
+  lower-bound constraint in `DESCRIPTION` (e.g., `dplyr (>= 1.1.4)`). For
+  stricter pinning (exact versions, upper bounds, or non-repository sources),
+  use [Dependency Overrides](#dependency-overrides) via
+  `Config/intent/Imports/<pkg>` in `DESCRIPTION`.
 
 ---
 

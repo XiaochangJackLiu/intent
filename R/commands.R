@@ -292,7 +292,13 @@ cmd_add <- function(pkgs, dev = FALSE, project = NULL, dry_run = FALSE) {
 
   for (pkg in pkgs) {
     pkg_name <- extract_pkg_name(pkg)
-    intent_set_project_dep(project, package = pkg_name, type = desc_type)
+    version <- intent_get_installed_version(project, pkg_name)
+    intent_set_project_dep(
+      project,
+      package = pkg_name,
+      type = desc_type,
+      version = version
+    )
   }
 
   message("Updating lockfile...")

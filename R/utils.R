@@ -298,7 +298,14 @@ intent_snapshot <- function(project, force = TRUE) {
   backend_snapshot(project, repos, force = force, lockfile = candidate)
   lock <- renv::lockfile_read(candidate)
   lock <- intent_supplement_repositories(lock, repos)
-  lock$R$Repositories <- repos
+  # Merge declared repos with supplemented names (e.g. RSPM from PPM).
+  # Declared names take precedence; supplemented names that don't conflict
+  # are preserved so renv::restore() can resolve all package records.
+  supplemented_names <- setdiff(
+    names(lock$R$Repositories),
+    names(repos)
+  )
+  lock$R$Repositories <- c(repos, lock$R$Repositories[supplemented_names])
   intent_enforce_source_policy(project, lock, repos)
   renv::lockfile_write(lock, file = candidate, project = project)
   file.copy(candidate, lockfile, overwrite = TRUE)
@@ -341,6 +348,27 @@ format_source_policy_violations <- function(violations) {
     sprintf("  - %s: %s", violations$package, violations$reason)
   )
   paste(lines, collapse = "\n")
+}
+
+#' Read the installed version of a package from the project library.
+#'
+#' Returns a `">= <version>"` constraint string suitable for
+#' `intent_set_project_dep()`, or `"*"` when the package cannot be found.
+#'
+#' @param project Path to the project directory.
+#' @param package Package name.
+#' @return A version constraint string (`">= 1.0.0"`) or `"*"`.
+#' @keywords internal
+intent_get_installed_version <- function(project, package) {
+  lib <- backend_library(project)
+  desc <- tryCatch(
+    utils::packageDescription(package, lib.loc = lib),
+    error = function(e) NULL
+  )
+  if (is.null(desc) || is.null(desc$Version)) {
+    return("*")
+  }
+  paste(">=", desc$Version)
 }
 
 #' @keywords internal
