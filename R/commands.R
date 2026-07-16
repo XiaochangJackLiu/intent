@@ -14,18 +14,16 @@ cmd_init <- function(
 
   stop_for_unsafe_init(classification, renv_state)
 
-  if (!dir.exists(path)) {
-    dir.create(project_dir, recursive = TRUE)
-  }
-
   desc_path <- file.path(project_dir, "DESCRIPTION")
 
-  pkg_name <- gsub("[^[:alnum:].]", ".", basename(project_dir))
-  if (grepl("^[0-9.]", pkg_name)) {
-    pkg_name <- paste0("pkg.", pkg_name)
-  }
-
-  if (!file.exists(desc_path)) {
+  if (classification$type == "missing_manifest") {
+    if (!dir.exists(path)) {
+      dir.create(project_dir, recursive = TRUE)
+    }
+    pkg_name <- gsub("[^[:alnum:].]", ".", basename(project_dir))
+    if (grepl("^[0-9.]", pkg_name)) {
+      pkg_name <- paste0("pkg.", pkg_name)
+    }
     message("Creating DESCRIPTION file...")
     rproject <- desc::description$new("!new")
     rproject$set("Package", pkg_name)
@@ -90,6 +88,21 @@ cmd_init <- function(
         r_version
       }
       rproject$set_dep("R", type = "Depends", version = constraint)
+    }
+  }
+
+  for (repo_name in names(repos)) {
+    if (repo_url_is_platform_specific(repos[[repo_name]])) {
+      warning(
+        "Config/intent/repos/",
+        repo_name,
+        " uses a platform-specific URL: ",
+        repos[[repo_name]],
+        "\n",
+        "Cross-platform restore will fail on other operating systems. ",
+        "Use a platform-agnostic URL.",
+        call. = FALSE
+      )
     }
   }
 
@@ -170,10 +183,8 @@ stop_for_unsafe_init <- function(classification, renv_state) {
     ),
     non_intent_manifest = stop(
       "DESCRIPTION exists but is not an intent manifest. ",
-      "Before running `intent::init()`, ensure Imports and Suggests list ",
-      "the direct dependencies to manage and add `Config/intent/repos/<NAME>` ",
-      "fields for project repositories. After the manifest is compliant, ",
-      "run `intent::status()` or `intent::verify()` to inspect the project.",
+      "Add `Config/intent/repos/<NAME>` fields to declare project repositories. ",
+      "After the manifest is compliant, run `intent::init()` again.",
       call. = FALSE
     ),
     missing_manifest = {
@@ -186,7 +197,13 @@ stop_for_unsafe_init <- function(classification, renv_state) {
         )
       }
     },
-    intent_manifest = NULL
+    intent_manifest = NULL,
+    stop(
+      "Internal error: unknown init classification '",
+      classification$type,
+      "'.",
+      call. = FALSE
+    )
   )
 
   invisible(TRUE)
@@ -275,7 +292,13 @@ cmd_add <- function(pkgs, dev = FALSE, project = NULL, dry_run = FALSE) {
 
   for (pkg in pkgs) {
     pkg_name <- extract_pkg_name(pkg)
-    intent_set_project_dep(project, package = pkg_name, type = desc_type)
+    version <- intent_get_installed_version(project, pkg_name)
+    intent_set_project_dep(
+      project,
+      package = pkg_name,
+      type = desc_type,
+      version = version
+    )
   }
 
   message("Updating lockfile...")
@@ -478,4 +501,46 @@ cmd_verify <- function(project = NULL) {
     issues = issues,
     status = current_status
   )
+}
+
+cmd_adopt <- function(
+  path = ".",
+  repos = NULL,
+  strategy = c("manifest", "lockfile-assisted"),
+  dry_run = TRUE,
+  install_self = "hydrate",
+  confirm = interactive()
+) {
+  strategy <- match.arg(strategy)
+  install_self <- match.arg(install_self, c("hydrate", "never"))
+
+  project_dir <- normalizePath(
+    path.expand(path),
+    winslash = "/",
+    mustWork = FALSE
+  )
+  desc_path <- file.path(project_dir, "DESCRIPTION")
+
+  adopt_validate_manifest(desc_path)
+
+  rproject <- desc::description$new(desc_path)
+
+  current_repos <- get_repos(desc_path)
+  effective_repos <- adopt_resolve_repos(current_repos, repos)
+
+  plan <- adopt_build_plan(
+    project_dir = project_dir,
+    rproject = rproject,
+    strategy = strategy,
+    effective_repos = effective_repos,
+    confirm = confirm
+  )
+
+  if (dry_run) {
+    return(plan)
+  }
+
+  adopt_apply_plan(plan, project_dir, rproject, effective_repos, install_self)
+
+  invisible(plan)
 }

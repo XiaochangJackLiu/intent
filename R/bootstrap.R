@@ -4,8 +4,11 @@ bootstrap_packages <- function() {
 
 bootstrap_dependency_plan <- function(
   rproject,
-  versions = bootstrap_dependency_versions()
+  versions = bootstrap_dependency_versions(),
+  override = FALSE
 ) {
+  bootstrap_validate_versions(versions)
+
   deps <- rproject$get_deps()
   add <- bootstrap_dependency_rows_empty()
   preserve <- bootstrap_dependency_rows_empty()
@@ -19,6 +22,30 @@ bootstrap_dependency_plan <- function(
       add <- rbind(
         add,
         bootstrap_dependency_row(pkg, "Suggests", default_version)
+      )
+      next
+    }
+
+    if (
+      isTRUE(override) &&
+        !identical(existing$version[[1]], default_version)
+    ) {
+      add <- rbind(
+        add,
+        bootstrap_dependency_row(pkg, "Suggests", default_version)
+      )
+      issues <- rbind(
+        issues,
+        bootstrap_dependency_issue(
+          pkg,
+          "info",
+          sprintf(
+            "%s constraint '%s' overrides existing declaration '%s'",
+            pkg,
+            default_version,
+            existing$version[[1]]
+          )
+        )
       )
       next
     }
@@ -48,6 +75,27 @@ bootstrap_dependency_plan <- function(
       ok = !any(issues$severity == "error")
     ),
     class = "bootstrap_dependency_plan"
+  )
+}
+
+bootstrap_validate_versions <- function(versions) {
+  intent_version <- versions[["intent"]]
+  if (
+    is.null(intent_version) ||
+      is.na(intent_version) ||
+      !nzchar(intent_version) ||
+      identical(intent_version, "*")
+  ) {
+    return(invisible(TRUE))
+  }
+  if (bootstrap_is_lower_bound(intent_version)) {
+    return(invisible(TRUE))
+  }
+  stop(
+    "intent version must be a '>=' constraint, got '",
+    intent_version,
+    "'.",
+    call. = FALSE
   )
 }
 
@@ -120,9 +168,65 @@ bootstrap_dependency_conflict <- function(
   }
 
   required <- bootstrap_parse_version_constraint(required_version)
-  user <- bootstrap_parse_version_constraint(user_version)
-  if (is.null(user) || is.null(required)) {
+  if (is.null(required)) {
     return(NULL)
+  }
+
+  user <- bootstrap_parse_version_constraint(user_version)
+  if (is.null(user)) {
+    if (
+      !is.null(user_version) &&
+        !is.na(user_version) &&
+        nzchar(user_version) &&
+        !identical(user_version, "*")
+    ) {
+      return(bootstrap_dependency_issue(
+        package,
+        "warning",
+        sprintf(
+          "%s constraint '%s' could not be parsed; preserving as-is",
+          package,
+          user_version
+        )
+      ))
+    }
+    return(NULL)
+  }
+
+  # Warning: user lower bound is looser than intent's requirement
+  if (
+    identical(user$operator, ">=") &&
+      identical(required$operator, ">=")
+  ) {
+    if (utils::compareVersion(user$version, required$version) < 0) {
+      return(bootstrap_dependency_issue(
+        package,
+        "warning",
+        sprintf(
+          "%s constraint '%s' is looser than intent requirement '%s'",
+          package,
+          user_version,
+          required_version
+        )
+      ))
+    }
+  }
+
+  # Info: user strict lower bound with intent non-strict requirement
+  if (
+    identical(user$operator, ">") &&
+      identical(required$operator, ">=")
+  ) {
+    return(bootstrap_dependency_issue(
+      package,
+      "info",
+      sprintf(
+        "%s constraint '%s' uses strict lower bound; intent requirement is '%s'",
+        package,
+        user_version,
+        required_version
+      )
+    ))
   }
 
   conflicts <- FALSE
@@ -257,6 +361,7 @@ bootstrap_metadata_deps <- function(metadata) {
   on.exit(unlink(path), add = TRUE)
   lines <- c(
     "Package: intent-bootstrap",
+    "Title: Internal Bootstrap Metadata Parser",
     "Version: 0.0.0",
     unlist(
       Map(format_dcf_field, names(values), values),

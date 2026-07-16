@@ -1,6 +1,6 @@
 # Adopt Migration Plan
 
-Status: `planned`
+Status: `implemented`
 
 ## Problem
 
@@ -31,6 +31,12 @@ The key product distinction is:
 intent::init()   # safe initialization for new or already-compliant projects
 intent::adopt()  # explicit migration for existing projects
 ```
+
+## Prerequisites
+
+- `025-bootstrap-plan-ux.md` — `print()` / `as.character()` methods for
+  `bootstrap_dependency_plan` and warning-level issue support. `adopt()` dry-run
+  output depends on human-readable bootstrap plan formatting.
 
 ## Non-Goals
 
@@ -76,6 +82,33 @@ The CLI can mirror this later:
 intent adopt
 intent adopt --apply
 ```
+
+### Design Decisions (clarified 2026-07-11)
+
+- **`repos = NULL`**: Reads repositories from existing `DESCRIPTION`. If none
+  exist there, stops with an error guiding the user to declare repos via
+  `Config/intent/repos/<NAME>` fields or pass `repos =` explicitly.
+- **`strategy = "manifest"` with missing DESCRIPTION**: Produces a blocking
+  error. The strategy requires a parseable `DESCRIPTION` as the source of
+  direct dependency intent. Missing DESCRIPTION must be handled by `init()`.
+- **`install_self`**: Follows the same semantics as `intent::init()` —
+  `"hydrate"` copies the currently installed `intent` package into the project
+  library when available; `"never"` leaves `intent` as an external tool.
+- **`strategy = "lockfile-assisted"` candidate selection**: Interactive
+  prompt when `confirm = TRUE`, allowing the user to select which candidate
+  dependencies from `renv.lock` to promote to `Imports` / `Suggests` in
+  `DESCRIPTION`. When `confirm = FALSE`, all candidates are reported but none
+  are applied.
+- **Bootstrap dependency override**: When `override = TRUE`,
+  `bootstrap_dependency_plan()` overrides existing dependency constraints in
+  `DESCRIPTION` with the values from its `versions` argument, issuing an info
+  issue for each override. When `override = FALSE` (default), existing
+  constraints are preserved (manifest wins). `adopt()` uses `override = TRUE`
+  to apply version policy updates.
+- **`confirm` parameter**: When `TRUE` (the default in interactive sessions),
+  prompts before applying changes, selecting candidates, or writing the
+  default repository. When `FALSE`, uses default behaviours without prompting.
+  This is analogous to `--yes` in the CLI.
 
 ## Adoption Strategies
 
@@ -241,6 +274,9 @@ the user explicitly selects or writes them into `DESCRIPTION`.
 
 ## Implementation Steps
 
+0. **Prerequisite:** Implement `print.bootstrap_dependency_plan()` and
+   `as.character.bootstrap_dependency_plan()` (`025`), plus warning-level issue
+   support in `bootstrap_dependency_conflict()`.
 1. Add an adoption plan structure and empty dataframe helpers.
 2. Implement `adoption_plan()` for `strategy = "manifest"`.
 3. Reuse `bootstrap_dependency_plan()` inside adoption planning.
@@ -281,7 +317,20 @@ Add focused tests for:
 
 ## Result / Follow-Up Notes
 
-Fill this in after implementation.
-
-- Result:
+- Result: Implemented `intent::adopt()` with MVP scope. Added `R/adopt-core.R`
+  (S3 class `adoption_plan`, plan builder, apply logic), `R/adopt.R` (public
+  wrapper), `cmd_adopt()` in `R/commands.R` (dispatcher with dry_run/apply
+  modes), `cli_adopt()` in `R/cli.R` (CLI entry point), `print.adoption_plan()`
+  and `as.character.adoption_plan()` in `R/status.R`. The `"manifest"` strategy
+  validates DESCRIPTION existence, resolves repos (caller-provided >
+  DESCRIPTION > error), builds a bootstrap plan with `override = TRUE`, compares
+  DESCRIPTION against lockfile, checks `.Renviron`, and produces a structured
+  `adoption_plan` with actions/issues/candidates. Apply mode writes repos,
+  applies bootstrap deps, writes DESCRIPTION, configures `.Renviron`, sets
+  `renv` snapshot type to explicit, hydrates intent, and syncs. 29 focused
+  tests cover dry-run, apply mode, edge cases, and print format.
 - Follow-up work:
+  - Implement interactive candidate selection for `strategy = "lockfile-assisted"`
+    when `confirm = TRUE`.
+  - Add CLI flags for `--repos`, `--strategy`, `--yes` to `cli_adopt()`.
+  - Add `intent::adopt()` to README documentation and pkgdown site.

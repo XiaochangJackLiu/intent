@@ -358,6 +358,14 @@ intent_verify_project_issues <- function(project, status) {
   )
   issues <- rbind(
     issues,
+    intent_check_platform_repos(repos, status$source_policy)
+  )
+  issues <- rbind(
+    issues,
+    intent_verify_lockfile_repo_resolvability(lock, repos)
+  )
+  issues <- rbind(
+    issues,
     intent_verify_lockfile_closure_issues(
       lock,
       roots = c(status$manifest_packages, "intent", "pak", "renv")
@@ -685,6 +693,84 @@ intent_verify_lockfile_closure_issues <- function(lock, roots) {
   )
 }
 
+intent_verify_lockfile_repo_resolvability <- function(lock, repos) {
+  packages <- lock$Packages %||% list()
+  if (length(packages) == 0) {
+    return(intent_verification_issues_empty())
+  }
+
+  issues <- intent_verification_issues_empty()
+  repo_names <- names(repos)
+
+  for (pkg_name in names(packages)) {
+    record <- packages[[pkg_name]]
+    repo <- record[["Repository"]]
+    if (is.null(repo) || is.na(repo) || !nzchar(repo)) {
+      next
+    }
+
+    # Direct name match -- resolvable
+    if (repo %in% repo_names) {
+      next
+    }
+
+    # URL-match via package record's own URL fields
+    record_url <- intent_lock_record_repository_url(record)
+    if (!is.na(record_url) && nzchar(record_url)) {
+      norm_record_url <- normalize_repo_url(record_url)
+      url_matched <- FALSE
+      for (decl_name in repo_names) {
+        if (
+          identical(normalize_repo_url(repos[[decl_name]]), norm_record_url)
+        ) {
+          url_matched <- TRUE
+          break
+        }
+      }
+      if (url_matched) {
+        next
+      }
+    }
+
+    # URL-match via lockfile R$Repositories entry for this repo name
+    lock_repos <- lock$R$Repositories %||% character()
+    if (repo %in% names(lock_repos)) {
+      lock_repo_url <- lock_repos[[repo]]
+      if (!is.na(lock_repo_url) && nzchar(lock_repo_url)) {
+        norm_lock_url <- normalize_repo_url(lock_repo_url)
+        url_matched <- FALSE
+        for (decl_name in repo_names) {
+          if (
+            identical(normalize_repo_url(repos[[decl_name]]), norm_lock_url)
+          ) {
+            url_matched <- TRUE
+            break
+          }
+        }
+        if (url_matched) {
+          next
+        }
+      }
+    }
+
+    # Unresolvable
+    issues <- rbind(
+      issues,
+      intent_verification_issue(
+        "lockfile_repo_resolvability",
+        "error",
+        sprintf(
+          "Package '%s' references repository '%s' which is not declared in Config/intent/repos",
+          pkg_name,
+          repo
+        )
+      )
+    )
+  }
+
+  issues
+}
+
 intent_source_violation <- function(package, source, repository, reason) {
   data.frame(
     package = package,
@@ -750,7 +836,7 @@ intent_check_repository_policy <- function(row, repos) {
     return(intent_source_violations_empty())
   }
 
-  # Case 3: Undeclared name — resolve against declared URLs via the
+  # Case 3: Undeclared name -- resolve against declared URLs via the
   # package's own repository_url.  Covers PPM (RSPM) and any future
   # repository name that resolves to a declared URL.
   if (
@@ -790,9 +876,51 @@ normalize_repo_url <- function(url) {
   sub("/+$", "", trimws(url))
 }
 
+repo_url_is_platform_specific <- function(url) {
+  grepl(
+    "__(linux|macos|windows|mac)__|manylinux|/macos/|/windows/",
+    url
+  )
+}
+
+intent_check_platform_repos <- function(repos, source_policy) {
+  if (is.null(source_policy) || identical(source_policy$mode, "off")) {
+    return(intent_verification_issues_empty())
+  }
+
+  issues <- intent_verification_issues_empty()
+  for (repo_name in names(repos)) {
+    url <- repos[[repo_name]]
+    if (repo_url_is_platform_specific(url)) {
+      severity <- if (identical(source_policy$mode, "error")) {
+        "error"
+      } else {
+        "warning"
+      }
+      issues <- rbind(
+        issues,
+        intent_verification_issue(
+          "platform_repos",
+          severity,
+          paste0(
+            sprintf(
+              "Config/intent/repos/%s uses a platform-specific URL: %s. ",
+              repo_name,
+              url
+            ),
+            "Cross-platform restore will fail on other operating systems. ",
+            "Use a platform-agnostic URL."
+          )
+        )
+      )
+    }
+  }
+  issues
+}
+
 # Repository names that renv lockfile package records may contain even
 # when the user declared the same source under a different name.  Used
-# only to generate informative messages — never for silent behaviour
+# only to generate informative messages -- never for silent behaviour
 # changes.  PPM's PACKAGES file reports Repository: RSPM regardless of
 # how the user names the repository in Config/intent/repos.
 INTENT_KNOWN_PPM_NAMES <- c("RSPM")

@@ -1,0 +1,114 @@
+# Cross-platform lockfile verification test.
+# Creates a lockfile on Linux, then verifies it on macOS.
+# Tests that intent::verify() correctly handles a lockfile
+# created on a different platform (repository resolution, source
+# policy, lockfile repo resolvability).
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main]
+
+name: cross-platform-restore
+
+permissions: read-all
+
+jobs:
+  create-lockfile:
+    runs-on: ubuntu-latest
+    name: Create lockfile (ubuntu)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools, any::dplyr
+          needs: check
+
+      - name: Create intent project and generate lockfile
+        id: create
+        shell: bash
+        run: |
+          PROJECT_DIR=$(mktemp -d)
+          echo "project_dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+          Rscript -e "
+            devtools::load_all()
+            intent::init(
+              path = '$PROJECT_DIR',
+              repos = c(CRAN = 'https://packagemanager.posit.co/cran/latest', RSPM = 'https://packagemanager.posit.co/cran/latest'),
+              install_self = 'never'
+            )
+            intent::add('dplyr')
+          "
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockfile-linux
+          path: ${{ steps.create.outputs.project_dir }}/renv.lock
+
+      - name: Upload DESCRIPTION
+        uses: actions/upload-artifact@v4
+        with:
+          name: description-linux
+          path: ${{ steps.create.outputs.project_dir }}/DESCRIPTION
+
+  verify-lockfile:
+    needs: create-lockfile
+    runs-on: macos-latest
+    name: Verify lockfile (macOS)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools
+          needs: check
+
+      - name: Install intent
+        run: R CMD INSTALL .
+
+      - name: Download lockfile artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lockfile-linux
+
+      - name: Download DESCRIPTION artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: description-linux
+
+      - name: Verify project from Linux lockfile
+        shell: bash
+        run: |
+          PROJECT_DIR=$(mktemp -d)
+          cp renv.lock "$PROJECT_DIR/"
+          cp DESCRIPTION "$PROJECT_DIR/"
+          Rscript -e "
+            library(intent)
+            cat('Verifying lockfile created on Linux from macOS:\n')
+            result <- intent::verify(project = '$PROJECT_DIR')
+            print(result)
+            # Allow 'missing_from_library' issues (packages not installed on this platform)
+            # but fail on cross-platform issues (repo resolvability, platform-specific URLs)
+            cross_issues <- result\$issues[
+              !result\$issues\$check %in% c('library', 'lockfile'),
+              ,
+              drop = FALSE
+            ]
+            if (nrow(cross_issues) > 0) {
+              cat('\nCross-platform verification issues found:\n')
+              print(cross_issues)
+              stop('Cross-platform lockfile verification failed.')
+            }
+            cat('\nCross-platform verify passed on', Sys.info()['sysname'], '\n')
+          "

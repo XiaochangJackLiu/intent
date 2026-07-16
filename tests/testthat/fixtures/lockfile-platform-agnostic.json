@@ -1,0 +1,16 @@
+{
+  "R": {
+    "Version": "4.5.0",
+    "Repositories": {
+      "CRAN": "https://packagemanager.posit.co/cran/latest"
+    }
+  },
+  "Packages": {
+    "glue": {
+      "Package": "glue",
+      "Version": "1.7.0",
+      "Source": "Repository",
+      "Repository": "CRAN"
+    }
+  }
+}

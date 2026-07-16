@@ -337,5 +337,29 @@ contents and verifies they are unchanged after a refused init.
   dependencies now preserve user constraints, add `intent (>= <running version>)`
   by default, and copy known `pak` / `renv` lower bounds from the running
   `intent` package metadata when declared.
-- Follow-up work: Design an explicit adoption or migration command for existing
-  renv projects that do not yet have an intent-compliant `DESCRIPTION`.
+- Follow-up work:
+  - **Classifier hardening** (`026`): `classify_init_description()` lacks direct
+    unit tests — coverage is only indirect through `cmd_init()`. Edge cases around
+    malformed repo config (empty values, `NA` names, partially valid multi-repo)
+    are untested. The function should call `read_intent_config()` directly rather
+    than routing through `get_repos()` so it can distinguish "no config" from
+    "config parse failure".
+  - **Switch exhaustiveness**: `stop_for_unsafe_init()` has no default branch in
+    its `switch()` — a new classification type would silently pass through. Add an
+    explicit fallthrough that stops with an internal error.
+  - **Error message scope**: The `non_intent_manifest` error tells users to "ensure
+    Imports and Suggests list the direct dependencies" but the classifier only
+    checks `Config/intent/repos/*`. Either expand the classifier to check for
+    declared dependencies, or narrow the error message to match what is actually
+    checked.
+  - **Side-effect ordering**: `dir.create()` at `R/commands.R:17-19` runs after
+    classification but before the safety gate. If a future code change inserts
+    logic between them, a directory could be created and then init refused. Move
+    `dir.create()` inside the `missing_manifest` branch of `stop_for_unsafe_init()`
+    or immediately after it.
+  - **Duplicate file check**: `cmd_init()` checks `file.exists(desc_path)` at
+    line 28, but the classifier already did this 11 lines earlier at line 129.
+    Use the classification `type` directly for branching instead, eliminating a
+    TOCTOU window.
+  - Design an explicit adoption or migration command for existing renv projects
+    that do not yet have an intent-compliant `DESCRIPTION` (`024`).

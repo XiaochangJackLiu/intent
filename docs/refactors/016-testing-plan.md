@@ -20,8 +20,9 @@ automatically. Manual analysis is needed.
 | Source File | Functions | Unit-Tested | Integration-Tested | Not Tested |
 |-------------|-----------|:-----------:|:------------------:|:----------:|
 | `R/backend.R` | 8 | 0 | 8 | 0 |
+| `R/bootstrap.R` | 14 | 9 | 0 | 5 |
 | `R/cli.R` | 10 | 5 | 0 | 5 |
-| `R/commands.R` | 5 | 4 | 5 | 0 |
+| `R/commands.R` | 8 | 7 | 5 | 0 |
 | `R/desc.R` | 5 | 4 | 0 | 1 |
 | `R/init.R` | 1 | 0 | 1 | 0 |
 | `R/add.R` | 1 | 0 | 1 | 0 |
@@ -30,7 +31,7 @@ automatically. Manual analysis is needed.
 | `R/status.R` | 6 | 3 | 0 | 3 |
 | `R/status-core.R` | 5 | 3 | 0 | 2 |
 | `R/utils.R` | 13 | 6 | 4 | 3 |
-| **Total** | **56** | **25** | **21** | **10** |
+| **Total** | **73** | **37** | **21** | **15** |
 
 Estimated line coverage: ~70% unit + ~20% integration = **~90% combined**.
 
@@ -57,7 +58,8 @@ isolation. See that file for instructions.)
 
 ```
 tests/testthat/
-├── test-init.R              Integration: real project init (1 test)
+├── test-init.R              Integration + unit: init safety, classification (14 tests)
+├── test-bootstrap-deps.R    Unit: bootstrap dependency planning (9 tests)
 ├── test-add-remove.R        Integration: real add/remove cycle (1 test)
 ├── test-sync.R              Integration + unit: sync/prune behavior (4 tests)
 ├── test-cli.R               Unit: dispatch + flag parsing (10 tests)
@@ -93,6 +95,17 @@ roadmap Phase 2 criterion.
    - `intent::add()` / `intent::remove()` full cycle
    - `intent::sync()` with real install, snapshot, restore
    - `intent::status()` on a real project
+
+### Cross-Platform Restore Tests (`027`)
+
+See `027-cross-platform-restore.md` for design. Planned additions:
+
+- [x] **Fixture directory:** `tests/testthat/fixtures/` with representative lockfiles
+- [x] **Unit tests:** `repo_url_is_platform_specific()` classification, platform URL
+  detection in `verify()`, `intent_supplement_repositories()` with RSPM→CRAN
+  name mapping, unresolvable repository error
+- [x] **Existing test fix:** Replace hardcoded Linux-only URL in `test-init.R:385`
+- [ ] **CI pipeline:** Two-stage job (Linux create → Windows/macOS restore)
 
 ### Test Quality Checklist
 
@@ -140,8 +153,20 @@ Fill this in after implementation.
   coverage via covr (run in clean session via `tools/run_coverage.R`). Filled
   the three high-priority gaps: added unit tests for `intent_sync_project()`,
   `intent_get_project_deps()`, and `cli_print_help()`. Test suite now has
-  147 tests (0 failures). Documented the split between unit tests (fast, no
+  368 tests (0 failures). Documented the split between unit tests (fast, no
   network) and integration tests (real `renv`/`pak` operations).
-- Follow-up work: Add a Codecov CI gate once coverage tooling works in the
-  GitHub Actions environment. Add edge-case tests for init-on-existing-project
-  with repos (warning path).
+- Follow-up work:
+  - Add a Codecov CI gate once coverage tooling works in the GitHub Actions
+    environment.
+  - Add edge-case tests for init-on-existing-project with repos (warning path).
+  - **022 + 023 integration test** (`026`): done.
+  - **Classifier unit tests** (`026`): done.
+  - **Bootstrap print/JSON tests** (`025`): done.
+  - **Bootstrap warning tests** (`025`): done.
+  - **Cross-platform restore tests** (`027`): add fixture-based lockfile
+    tests in `tests/testthat/fixtures/` (platform-agnostic, RSPM-renamed,
+    platform-specific URL, unresolvable repo). Add unit tests for
+    `repo_url_is_platform_specific()`. Add cross-platform CI artifact
+    pipeline job. Fix hardcoded Linux-specific URL in `test-init.R:385`.
+  - **Adoption plan tests** (`024`): add integration test with real
+    `intent::adopt(dry_run = FALSE)` on a project with existing renv state.

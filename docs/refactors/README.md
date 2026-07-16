@@ -58,3 +58,6 @@ plan, and updated after implementation with the actual result.
 - [022 Init DESCRIPTION-First Safety](022-init-description-first-safety.md)
 - [023 Bootstrap Dependency Planning](023-bootstrap-dependency-planning.md)
 - [024 Adopt Migration Plan](024-adopt-migration-plan.md)
+- [025 Bootstrap Plan User-Facing Output](025-bootstrap-plan-ux.md)
+- [026 Init Classification Hardening](026-init-classification-hardening.md)
+- [027 Cross-Platform Restore Safety](027-cross-platform-restore.md)

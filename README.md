@@ -27,6 +27,7 @@ In standard R, keeping your `DESCRIPTION` file, your installed packages, and you
 | Action | Standard R (Manual) | R (**`intent`**) |
 | --- | --- | --- |
 | **Initialize** | Create `DESCRIPTION` manually, run `renv::init()`, configure settings | `intent::init()` |
+| **Adopt Existing** | Manual migration | `intent::adopt()` |
 | **Add Dependency** | Edit `DESCRIPTION`, run `install.packages()`, run `renv::snapshot()` | `intent::add("pkg")` |
 | **Remove Dependency** | Edit `DESCRIPTION`, run `remove.packages()`, run `renv::snapshot()` | `intent::remove("pkg")` |
 | **Sync Environment** | Run `renv::restore()`, manually check consistency | `intent::sync()` |
@@ -198,6 +199,29 @@ intent-compliant `DESCRIPTION`, as an `intent` project.
   from your active library paths into the project library when possible, without
   assuming a remote source such as GitHub, CRAN, or R-universe.
 * Use `install_self = "never"` if you want `intent` to remain an external tool.
+
+### `intent::adopt(path, repos, strategy = "manifest", dry_run = TRUE, install_self = "hydrate")`
+
+Adopts an existing R project into intent management. Unlike `init()`, which
+creates brand-new projects or requires an intent-compliant DESCRIPTION,
+`adopt()` converts a project that already has a DESCRIPTION and optionally an
+existing `renv.lock` into an intent-managed project.
+
+* **Default is non-mutating:** returns an `adoption_plan` that describes what
+  would change. Pass `dry_run = FALSE` to apply changes.
+* **Strategy `"manifest"`** (default): treats the existing `DESCRIPTION` as the
+  source of direct dependency intent. Adds missing `Config/intent/repos/*`
+  fields, bootstrap tool dependencies (`intent`, `pak`, `renv`), and
+  `.Renviron` configuration. Reports packages in `renv.lock` that are not
+  declared in `DESCRIPTION`.
+* **Strategy `"lockfile-assisted"`**: also reads `renv.lock` to identify
+  candidate dependencies for review.
+* Validates that repository URLs are platform-agnostic, warns on
+  platform-specific URLs that would break cross-platform restore.
+* Writes `RENV_CONFIG_PAK_ENABLED = TRUE` to `.Renviron` when missing.
+* Sets `renv` snapshot type to `"explicit"`.
+* Self-hydrates `intent` by default (`install_self = "hydrate"`).
+* CLI: `intent adopt [path] [--repo NAME=URL] [--strategy name] [--apply] [--yes]`
 
 ### `intent::add(pkgs, dev = FALSE, dry_run = FALSE)`
 
@@ -403,6 +427,8 @@ checking is turned off.
 | Missing `renv` or `pak` | `"The following required packages are missing: ..."` | Install `renv` and `pak` first |
 | No repositories configured and defaults disabled | `"No repositories configured. Pass repos = ..."` | Pass `repos = c(NAME = "URL")`, use `intent init --repo NAME=URL`, or add `Config/intent/repos/` fields |
 | Source policy violation | `"Source policy violation..."` | Update `Config/intent/source-policy/*`, use an allowed package source, or declare the repository under `Config/intent/repos/` |
+| Platform-specific repository URL | `"uses a platform-specific URL"` | Replace with a platform-agnostic URL (e.g. `/cran/latest` instead of `/cran/__linux__/...`) |
+| Lockfile repository not declared | `"references repository 'X' which is not declared"` | Add the repository name and URL to `Config/intent/repos/` in DESCRIPTION |
 
 ---
 
@@ -521,6 +547,18 @@ A project ready for `intent::add()`. If self-hydration succeeds,
 the project is still initialized and `intent` can be installed from the user's
 chosen package source.
 
+Files created or modified by `init()`:
+
+* `DESCRIPTION` — project manifest with `Config/intent/repos/*` fields
+* `renv.lock` — exact dependency versions (in "explicit" snapshot mode)
+* `renv/` — `renv` infrastructure (activation scripts, settings)
+* `.Rprofile` — sources `renv/activate.R` to auto-load the project library
+* `.Renviron` — sets `RENV_CONFIG_PAK_ENABLED = TRUE`
+* `.Rbuildignore` — created by `renv::init()` when `DESCRIPTION` contains a
+  `Package` field; adds `^renv$` and `^renv.lock$` so these files are excluded
+  from `R CMD build`. This is standard `renv` behaviour and is harmless for
+  non-package projects.
+
 ---
 
 ## 2. `intent::add()`
@@ -544,6 +582,12 @@ chosen package source.
    then replace the official `renv.lock` only if policy allows it.
 
 * **Exit State:** Package is in `DESCRIPTION`, installed in `renv/library`, and recorded in `renv.lock`.
+
+* **Version Constraints:** `add()` records the installed version as a `>=`
+  lower-bound constraint in `DESCRIPTION` (e.g., `dplyr (>= 1.1.4)`). For
+  stricter pinning (exact versions, upper bounds, or non-repository sources),
+  use [Dependency Overrides](#dependency-overrides) via
+  `Config/intent/Imports/<pkg>` in `DESCRIPTION`.
 
 ---
 
@@ -627,7 +671,12 @@ chosen package source.
 3. Check that locked packages are installed.
 4. Check that lockfile repositories match `Config/intent/repos/`.
 5. Check source policy violations.
-6. Check for lockfile packages outside the dependency closure rooted at
+6. Check that every lockfile package's Repository name is resolvable against
+   declared `Config/intent/repos/` entries (via direct name match, URL match, or
+   lockfile `R$Repositories` URL match).
+7. Check that repository URLs are platform-agnostic (no `__linux__`,
+   `__macos__`, or `manylinux` segments) to ensure cross-platform restore safety.
+8. Check for lockfile packages outside the dependency closure rooted at
    `DESCRIPTION` dependencies and bootstrap packages.
 
 * **Exit State:** No files or packages are changed. Returns an
@@ -642,6 +691,7 @@ chosen package source.
 | Function | Primary Tool | Target File | Impact |
 | --- | --- | --- | --- |
 | `init` | `renv` | `.Rprofile` | Environment Architecture |
+| `adopt` | `desc` + `renv` | `DESCRIPTION` | Migration |
 | `add` | `desc` + `pak` | `DESCRIPTION` | Manifest & Library |
 | `remove` | `desc` + `renv` | `DESCRIPTION` | Manifest & Library |
 | `sync` | `renv` + `pak` | `renv.lock` | Library State |

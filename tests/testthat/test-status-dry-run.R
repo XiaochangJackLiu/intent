@@ -196,7 +196,7 @@ test_that("verify accepts same-URL repos with different names", {
     repos = c(CRAN = "https://packagemanager.posit.co/cran/latest")
   )
 
-  # Same URL, different names — not a violation
+  # Same URL, different names -- not a violation
   expect_false(any(grepl("missing repositories", issues$message)))
   expect_false(any(grepl("not declared", issues$message)))
 })
@@ -213,7 +213,7 @@ test_that("verify flags truly different repository URLs", {
     repos = c(RSPM = "https://packagemanager.posit.co/cran/latest")
   )
 
-  # Different URLs — real issues
+  # Different URLs -- real issues
   expect_true(any(grepl("missing repositories", issues$message)))
   expect_true(any(grepl("not declared", issues$message)))
 })
@@ -457,7 +457,7 @@ test_that("intent_supplement_repositories skips URL-type Repository fields", {
     repos = c(CRAN = "https://cran.r-project.org")
   )
 
-  # No supplementation — URL-type is skipped
+  # No supplementation -- URL-type is skipped
   expect_equal(names(result$R$Repositories), "CRAN")
 })
 
@@ -470,7 +470,7 @@ test_that("intent_supplement_repositories messages on undeclared known name", {
       dplyr = list(
         Version = "1.0.0",
         Repository = "RSPM"
-        # No RepositoryURL — can't resolve via URL, must message user
+        # No RepositoryURL -- can't resolve via URL, must message user
       )
     )
   )

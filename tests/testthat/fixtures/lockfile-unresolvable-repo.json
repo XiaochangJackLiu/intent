@@ -1,0 +1,16 @@
+{
+  "R": {
+    "Version": "4.5.0",
+    "Repositories": {
+      "UnknownRepo": "https://r.example.com/unknown"
+    }
+  },
+  "Packages": {
+    "mypkg": {
+      "Package": "mypkg",
+      "Version": "0.1.0",
+      "Source": "Repository",
+      "Repository": "UnknownRepo"
+    }
+  }
+}
