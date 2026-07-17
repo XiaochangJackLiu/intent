@@ -33,3 +33,9 @@ repos:
         language: system
         files: ^(R|tests)/.*\.R$
         types: [file]
+      - id: check-roxygen
+        name: Check roxygen2 documentation is current
+        entry: sh tools/check-roxygen.sh
+        language: system
+        pass_filenames: false
+        always_run: true
