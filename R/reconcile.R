@@ -103,8 +103,12 @@ intent_commit_lock <- function(project, candidate) {
   invisible(official)
 }
 
-intent_assert_library <- function(project, lock) {
-  drift <- intent_library_drift(project, lock)
+intent_assert_library <- function(
+  project,
+  lock,
+  library = backend_library(project)
+) {
+  drift <- intent_library_drift(project, lock, library = library)
   problems <- unique(c(drift$missing, drift$versions, drift$sources))
   if (length(problems)) {
     stop(
@@ -144,8 +148,9 @@ intent_execute_sync <- function(project, workflow) {
     if (length(seed$Packages)) {
       seed_path <- file.path(stage, "seed.lock")
       backend_write_lockfile(seed, project, path = seed_path)
-      backend_restore(
+      intent_restore_verified(
         project,
+        seed,
         workflow$repos,
         library = library,
         lockfile = seed_path,
@@ -201,20 +206,28 @@ intent_restore_verified <- function(
   lock,
   repos,
   clean,
-  lockfile = file.path(project, "renv.lock")
+  lockfile = file.path(project, "renv.lock"),
+  library = backend_library(project)
 ) {
-  backend_restore(project, repos, lockfile = lockfile, clean = clean)
-  drift <- intent_library_drift(project, lock)
+  backend_restore(
+    project,
+    repos,
+    lockfile = lockfile,
+    clean = clean,
+    library = library
+  )
+  drift <- intent_library_drift(project, lock, library = library)
   if (length(drift$sources)) {
     backend_restore(
       project,
       repos,
       lockfile = lockfile,
       clean = clean,
+      library = library,
       rebuild = drift$sources
     )
   }
-  intent_assert_library(project, lock)
+  intent_assert_library(project, lock, library = library)
 }
 
 intent_apply_resolution_provenance <- function(lock, evidence, repos) {

@@ -94,7 +94,7 @@ test_that("unchanged lock restoration never snapshots or resolves, including lib
     },
     backend_snapshot = function(...) stop("unexpected snapshot"),
     backend_resolve = function(...) stop("unexpected resolution"),
-    intent_assert_library = function(project, lock) TRUE
+    intent_assert_library = function(project, lock, ...) TRUE
   )
   cmd_sync(project)
   expect_equal(seen[[1]], normalize_project_path(project))
@@ -180,7 +180,7 @@ test_that("successful staged resolution commits only after verified restoration"
       backend_write_lockfile(candidate, project, path = lockfile)
     },
     backend_restore = function(...) events <<- c(events, "restore"),
-    intent_assert_library = function(project, lock) {
+    intent_assert_library = function(project, lock, ...) {
       expect_equal(
         backend_read_lockfile(project)$Packages$glue$Version,
         "1.0.0"
@@ -599,4 +599,71 @@ test_that("observed source drift triggers one targeted rebuild before verificati
   expect_length(calls, 2)
   expect_null(calls[[1]]$rebuild)
   expect_equal(calls[[2]]$rebuild, "glue")
+})
+
+test_that("seed verification repairs source drift in its explicit library", {
+  project <- contract_project()
+  on.exit(unlink(project, recursive = TRUE))
+  lock <- contract_lock(project)
+  seed_library <- file.path(project, "seed-library")
+  dir.create(file.path(seed_library, "glue"), recursive = TRUE)
+  description <- file.path(seed_library, "glue", "DESCRIPTION")
+  write_record <- function(url) {
+    writeLines(
+      c(
+        "Package: glue",
+        "Version: 1.0.0",
+        "Repository: CRAN",
+        paste("RemoteRepos:", url)
+      ),
+      description
+    )
+  }
+  write_record("https://runner.invalid")
+  before <- readLines(file.path(project, "renv.lock"))
+  calls <- list()
+  local_mocked_bindings(backend_restore = function(..., rebuild = FALSE) {
+    calls[[length(calls) + 1L]] <<- c(list(...), list(rebuild = rebuild))
+    if (identical(rebuild, "glue")) write_record("https://example.com")
+  })
+  intent_restore_verified(
+    project,
+    lock,
+    c(CRAN = "https://example.com"),
+    clean = FALSE,
+    library = seed_library
+  )
+  expect_length(calls, 2)
+  expect_true(all(vapply(
+    calls,
+    function(x) identical(x$library, seed_library),
+    logical(1)
+  )))
+  expect_length(
+    intent_library_drift(project, lock, library = seed_library)$sources,
+    0
+  )
+  expect_equal(readLines(file.path(project, "renv.lock")), before)
+})
+
+test_that("failed seed verification stops before resolution and preserves the lock", {
+  project <- contract_project("glue, newpkg")
+  on.exit(unlink(project, recursive = TRUE))
+  contract_lock(project)
+  before <- readLines(file.path(project, "renv.lock"))
+  resolved <- FALSE
+  local_mocked_bindings(
+    backend_stage_tools = function(...) NULL,
+    backend_restore = function(...) NULL,
+    backend_resolve = function(...) {
+      resolved <<- TRUE
+      stop("unexpected resolution")
+    }
+  )
+  expect_error(
+    cmd_sync(project),
+    "Project library does not match resolved state: glue"
+  )
+  expect_false(resolved)
+  expect_equal(readLines(file.path(project, "renv.lock")), before)
 })

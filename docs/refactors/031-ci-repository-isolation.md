@@ -55,5 +55,24 @@ with no failures, errors, test warnings or skips. Real lower/exact/upper constra
 and unchanged-lock restoration experiments also passed with an invalid ambient
 override URL, proving the explicit project target is used. Pre-commit checks passed.
 
-Hosted validation remains pending the fix's push. The dependency explanation
-proposal remains separate and no new user-facing feature is included here.
+Hosted run 38156519078 passed Linux project creation and both macOS/Windows
+restorations. Run 38156519132 passed quality and Windows/macOS package checks;
+all three Linux versions now have one remaining add/remove integration failure.
+The candidate includes Linux mirror provenance from a restored seed library.
+
+The seed path currently uses backend_restore without the source verification and
+targeted repair applied to the final project library. A cache hit can therefore
+contaminate the candidate before validation. Extend existing drift/verification
+helpers with an explicit library target and verify/repair the seed before giving
+it to the resolver. Preserve strict candidate validation and official lock
+protection. Tests must cover the seed target, cache source repair and a failed
+seed verification stopping resolution. Re-run local and hosted checks.
+
+The dependency explanation proposal remains separate and no new user-facing
+feature is included here.
+
+Seed-verification follow-up: all 28 contract cases (128 assertions) passed.
+The full CI-configuration rerun passed add/remove and the remaining tests except
+sync initialization, where pak failed to install the R6 binary. A focused rerun
+of that sync case passed both assertions without code changes. Pre-commit checks
+passed. Hosted validation of this follow-up remains pending.

@@ -274,8 +274,12 @@ intent_validate_candidate <- function(
   invisible(TRUE)
 }
 
-intent_library_drift <- function(project, lock) {
-  records <- backend_read_library(project)
+intent_library_drift <- function(
+  project,
+  lock,
+  library = backend_library(project)
+) {
+  records <- backend_read_library(project, library = library)
   missing <- setdiff(names(lock$Packages), names(records))
   versions <- character()
   sources <- character()
