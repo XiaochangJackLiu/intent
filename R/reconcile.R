@@ -137,6 +137,7 @@ intent_execute_sync <- function(project, workflow) {
   library <- file.path(stage, "library")
   dir.create(library)
   backend_stage_tools(project, library)
+  seed_records <- list()
   if (!is.null(workflow$lock)) {
     seed <- workflow$lock
     discard <- workflow$required
@@ -156,6 +157,7 @@ intent_execute_sync <- function(project, workflow) {
         lockfile = seed_path,
         clean = FALSE
       )
+      seed_records <- backend_read_library(project, library = library)
     }
   }
   overrides <- get_intent_overrides(file.path(project, "DESCRIPTION"))
@@ -185,7 +187,8 @@ intent_execute_sync <- function(project, workflow) {
   lock <- intent_preserve_locked_provenance(
     lock,
     workflow$lock,
-    workflow$required
+    workflow$required,
+    seed_records = seed_records
   )
   lock <- intent_normalize_candidate(project, lock, workflow$repos)
   intent_validate_candidate(project, lock, workflow$specs)
@@ -259,7 +262,12 @@ intent_apply_resolution_provenance <- function(lock, evidence, repos) {
   lock
 }
 
-intent_preserve_locked_provenance <- function(lock, previous, changed) {
+intent_preserve_locked_provenance <- function(
+  lock,
+  previous,
+  changed,
+  seed_records = list()
+) {
   # A fresh snapshot cannot recover URL evidence absent from embedded package
   # metadata. Preserve verified seed provenance only for unchanged identities.
   for (pkg in setdiff(
@@ -270,11 +278,34 @@ intent_preserve_locked_provenance <- function(lock, previous, changed) {
     old <- previous$Packages[[pkg]]
     if (
       intent_lock_record_source(record) != "repository" ||
+        intent_lock_record_source(old) != "repository" ||
         !identical(record$Version, old$Version) ||
-        !identical(record$Repository, old$Repository) ||
         !is.na(intent_record_repo_url(record, lock))
     ) {
       next
+    }
+    if (!identical(record$Repository, old$Repository)) {
+      seed <- seed_records[[pkg]]
+      if (
+        is.null(seed) ||
+          intent_lock_record_source(seed) != "repository" ||
+          !identical(record$Version, seed$Version) ||
+          !identical(
+            record$Repository,
+            seed$RemoteReposName %||% seed$Repository
+          )
+      ) {
+        next
+      }
+      seed_url <- intent_record_repo_url(seed, previous)
+      old_url <- intent_record_repo_url(old, previous)
+      if (
+        !is.na(seed_url) &&
+          (is.na(old_url) ||
+            normalize_repo_url(seed_url) != normalize_repo_url(old_url))
+      ) {
+        next
+      }
     }
     url <- intent_record_repo_url(old, previous)
     if (!is.na(url)) lock$Packages[[pkg]]$RepositoryURL <- url

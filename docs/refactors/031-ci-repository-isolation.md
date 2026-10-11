@@ -1,6 +1,6 @@
 # Isolate Explicit Repository Contracts from Ambient CI Configuration
 
-Status: `in-progress`
+Status: `implemented`
 Date: 2026-10-12
 
 ## Problem and evidence
@@ -76,3 +76,25 @@ The full CI-configuration rerun passed add/remove and the remaining tests except
 sync initialization, where pak failed to install the R6 binary. A focused rerun
 of that sync case passed both assertions without code changes. Pre-commit checks
 passed. Hosted validation of this follow-up remains pending.
+
+Run 38158527592 passed all cross-platform restoration jobs. In run 38158527755,
+Linux release/oldrel, Windows and quality passed; macOS add/remove failed because
+cached binary records use the build alias RSPM while the previous lock uses CRAN.
+The unchanged-version provenance helper requires identical aliases and therefore
+discards the previous proven URL even after verifying the seed.
+
+Retain a snapshot of verified seed metadata before resolution. Permit carrying
+the previous locked URL across an alias change only when the candidate matches
+that verified seed's repository class, version and alias, is not a changed root,
+and has no conflicting known URL. Without this seed evidence, retain the existing
+alias check. Never infer a URL from the literal alias RSPM, overwrite a known URL,
+or exempt packages from candidate validation. Cover positive and negative cases
+with deterministic fixtures before pushing another hosted validation run.
+
+Alias-evidence follow-up implemented: verified seed metadata is captured before
+resolution and passed to provenance preservation. Thirty contract cases (138
+assertions) passed, including alias evidence, changed versions, conflicting URLs
+and workflow ordering. The complete local suite under the CI repository override
+passed 179 cases and 558 assertions, with zero failures, errors, test warnings or
+skips. Pre-commit checks passed. Hosted validation of this commit is pending at
+the time these results are recorded; remote jobs remain the cross-platform gate.

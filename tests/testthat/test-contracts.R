@@ -483,6 +483,81 @@ test_that("prune-only snapshots preserve proven seed URLs without carrying chang
   )
 })
 
+test_that("alias changes preserve locked URLs only with matching verified seed evidence", {
+  old <- list(
+    R = list(Repositories = c(CRAN = "https://example.com")),
+    Packages = list(glue = contract_record())
+  )
+  candidate <- list(Packages = list(glue = contract_record()))
+  candidate$Packages$glue$Repository <- "RSPM"
+  seed <- candidate$Packages
+  preserve <- function(
+    records = list(),
+    changed = character(),
+    state = candidate
+  ) {
+    intent_preserve_locked_provenance(
+      state,
+      old,
+      changed,
+      records
+    )$Packages$glue
+  }
+  expect_null(preserve()$RepositoryURL)
+  expect_equal(preserve(seed)$RepositoryURL, "https://example.com")
+  expect_null(preserve(seed, "glue")$RepositoryURL)
+  seed$glue$Version <- "2.0.0"
+  expect_null(preserve(seed)$RepositoryURL)
+  seed <- candidate$Packages
+  seed$glue$RemoteRepos <- "https://conflicting.example"
+  expect_null(preserve(seed)$RepositoryURL)
+  seed <- candidate$Packages
+  seed$glue$Repository <- "UNKNOWN"
+  expect_null(preserve(seed)$RepositoryURL)
+  seed$glue$RemoteReposName <- "RSPM"
+  expect_equal(preserve(seed)$RepositoryURL, "https://example.com")
+  known <- candidate
+  known$Packages$glue$RepositoryURL <- "https://conflicting.example"
+  expect_equal(
+    preserve(seed, state = known)$RepositoryURL,
+    "https://conflicting.example"
+  )
+})
+
+test_that("reconciliation records verified seed aliases before invoking the resolver", {
+  project <- contract_project("glue, newpkg")
+  on.exit(unlink(project, recursive = TRUE))
+  contract_lock(project)
+  candidate <- list(
+    R = list(Version = as.character(getRversion())),
+    Packages = list(glue = contract_record(), newpkg = contract_record())
+  )
+  candidate$Packages$glue$Repository <- "RSPM"
+  seed_records <- candidate$Packages["glue"]
+  verified <- list()
+  local_mocked_bindings(
+    backend_stage_tools = function(...) NULL,
+    intent_restore_verified = function(..., library = NULL) {
+      verified[[length(verified) + 1L]] <<- library
+      TRUE
+    },
+    backend_read_library = function(...) seed_records,
+    backend_resolve = function(...) {
+      seed_records$glue$Repository <<- "CHANGED"
+      NULL
+    },
+    backend_snapshot = function(..., lockfile) {
+      backend_write_lockfile(candidate, project, lockfile)
+    }
+  )
+  cmd_sync(project)
+  expect_equal(
+    backend_read_lockfile(project)$Packages$glue$RepositoryURL,
+    "https://example.com"
+  )
+  expect_true(endsWith(verified[[1]], "/library"))
+})
+
 test_that("restore uses the explicit native engine and restores caller options on every exit", {
   withr::local_options(
     renv.config.pak.enabled = TRUE,
