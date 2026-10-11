@@ -484,11 +484,18 @@ test_that("prune-only snapshots preserve proven seed URLs without carrying chang
 })
 
 test_that("restore uses the explicit native engine and restores caller options on every exit", {
-  withr::local_options(renv.config.pak.enabled = TRUE)
+  withr::local_options(
+    renv.config.pak.enabled = TRUE,
+    renv.config.repos.override = "https://runner.invalid",
+    renv.config.ppm.enabled = TRUE
+  )
+  withr::local_envvar(RENV_CONFIG_REPOS_OVERRIDE = "https://runner.invalid")
   restore <- backend_restore
   captured <- NULL
   mockery::stub(restore, "renv::restore", function(...) {
     expect_false(getOption("renv.config.pak.enabled"))
+    expect_identical(renv::config$repos.override(), character())
+    expect_false(renv::config$ppm.enabled())
     captured <<- list(...)
   })
   restore(
@@ -499,6 +506,11 @@ test_that("restore uses the explicit native engine and restores caller options o
     clean = FALSE
   )
   expect_true(getOption("renv.config.pak.enabled"))
+  expect_equal(
+    getOption("renv.config.repos.override"),
+    "https://runner.invalid"
+  )
+  expect_true(getOption("renv.config.ppm.enabled"))
   expect_equal(captured$project, "project")
   expect_equal(captured$library, "library")
   expect_equal(captured$lockfile, "candidate.lock")
@@ -506,10 +518,45 @@ test_that("restore uses the explicit native engine and restores caller options o
   expect_false(captured$clean)
   mockery::stub(restore, "renv::restore", function(...) {
     expect_false(getOption("renv.config.pak.enabled"))
+    expect_identical(renv::config$repos.override(), character())
+    expect_false(renv::config$ppm.enabled())
     stop("restore failed")
   })
   expect_error(restore("project", library = "library"), "restore failed")
   expect_true(getOption("renv.config.pak.enabled"))
+  expect_equal(
+    getOption("renv.config.repos.override"),
+    "https://runner.invalid"
+  )
+  expect_true(getOption("renv.config.ppm.enabled"))
+})
+
+test_that("bare initialization scopes bootstrap repository overrides on every exit", {
+  init_backend <- backend_init
+  repos <- c(CRAN = "https://project.example", EXTRA = "https://extra.example")
+  mockery::stub(init_backend, "renv::init", function(...) {
+    expect_equal(
+      Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"),
+      "CRAN=https://project.example;EXTRA=https://extra.example"
+    )
+  })
+  withr::local_envvar(RENV_CONFIG_REPOS_OVERRIDE = "https://runner.invalid")
+  init_backend("project", repos)
+  expect_equal(
+    Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"),
+    "https://runner.invalid"
+  )
+  mockery::stub(init_backend, "renv::init", function(...) {
+    stop("bootstrap failed")
+  })
+  expect_error(init_backend("project", repos), "bootstrap failed")
+  expect_equal(
+    Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"),
+    "https://runner.invalid"
+  )
+  Sys.unsetenv("RENV_CONFIG_REPOS_OVERRIDE")
+  expect_error(init_backend("project", repos), "bootstrap failed")
+  expect_true(is.na(Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE", unset = NA)))
 })
 
 test_that("source rebuild removes only affected entries and restores shortcut options", {

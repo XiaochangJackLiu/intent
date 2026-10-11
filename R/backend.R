@@ -1,4 +1,21 @@
 backend_init <- function(project, repos) {
+  override <- Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE", unset = NA_character_)
+  on.exit(
+    {
+      if (is.na(override)) {
+        Sys.unsetenv("RENV_CONFIG_REPOS_OVERRIDE")
+      } else {
+        Sys.setenv(RENV_CONFIG_REPOS_OVERRIDE = override)
+      }
+    },
+    add = TRUE
+  )
+  Sys.setenv(
+    RENV_CONFIG_REPOS_OVERRIDE = paste(
+      paste0(names(repos), "=", unname(repos)),
+      collapse = ";"
+    )
+  )
   renv::init(
     project = project,
     bare = TRUE,
@@ -73,7 +90,11 @@ backend_restore <- function(
   clean = TRUE,
   rebuild = FALSE
 ) {
-  old_options <- options(renv.config.pak.enabled = FALSE)
+  old_options <- options(
+    renv.config.pak.enabled = FALSE,
+    renv.config.repos.override = character(),
+    renv.config.ppm.enabled = FALSE
+  )
   on.exit(options(old_options), add = TRUE)
   if (isTRUE(rebuild) || (is.character(rebuild) && length(rebuild))) {
     cache_options <- options(
