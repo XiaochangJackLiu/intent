@@ -24,7 +24,8 @@ repository configuration on every init.}
 
 \item{r_version}{R version constraint to write into \code{DESCRIPTION} as
 \verb{Depends: R (>= x.y)}.  Use \code{NULL} (the default) to record the
-current session's major.minor version, or \code{NA} to skip writing an R
+current session's major.minor version when no R constraint exists; preserves
+an existing constraint. Use \code{NA} or \code{FALSE} to skip writing an R
 version constraint.}
 
 \item{install_self}{Character string. \code{"hydrate"} attempts to copy the
@@ -48,4 +49,6 @@ For new empty projects, \code{init()} creates \code{DESCRIPTION}, initializes a 
 with a default lower-bound version constraint. Minimum \code{pak} and \code{renv}
 constraints are copied from the running \code{intent} package metadata when
 declared there; existing user constraints are preserved.
+Initialization then reconciles all declared dependencies. Tool lifecycle is
+recorded in \code{Config/intent/tools/intent} as managed or external.
 }

@@ -112,12 +112,21 @@ intent status
 # Preview changes before applying them
 intent sync --dry-run
 
+# Machine-readable sync preview (--json requires --dry-run)
+intent sync --dry-run --json
+
 # Sync environment
 intent sync
 
 # Remove a dependency
 intent remove ggplot2
 ```
+
+CLI previews print their action plans explicitly. Unsupported options are
+rejected before execution. `intent adopt` previews by default; use `--apply`
+to execute, and do not combine it with `--dry-run`. `--yes` only controls
+prompting. JSON output is supported by status, verify/doctor, adopt, and sync
+with `--dry-run`; add/remove do not accept `--json`.
 
 ### R API
 
@@ -189,9 +198,8 @@ intent-compliant `DESCRIPTION`, as an `intent` project.
 * Adds bootstrap tool dependencies. `intent` is written with a default
   lower-bound constraint, and `pak` / `renv` minimums are copied from the
   running `intent` package metadata when declared there.
-* **Defaults to [Posit Package Manager](https://packagemanager.posit.co/cran/latest)**
-  when no repositories are specified. The default repository is named `RSPM`
-  to match `renv.lock` provenance. Use `repos = c(NAME = "...")` to override.
+* **Defaults to CRAN** at https://cran.r-project.org, named CRAN. Use
+  repos = c(NAME = "URL") or INTENT_DEFAULT_REPOS to override.
 * In interactive sessions, confirms the default repository before writing it.
   In non-interactive sessions, writes the default and prints how to declare
   project repositories explicitly.
@@ -199,6 +207,7 @@ intent-compliant `DESCRIPTION`, as an `intent` project.
   from your active library paths into the project library when possible, without
   assuming a remote source such as GitHub, CRAN, or R-universe.
 * Use `install_self = "never"` if you want `intent` to remain an external tool.
+* Records the tool lifecycle and reconciles all declared dependencies after setup.
 
 ### `intent::adopt(path, repos, strategy = "manifest", dry_run = TRUE, install_self = "hydrate")`
 
@@ -239,17 +248,18 @@ The primary way to grow your project.
 The clean-up tool.
 
 * Removes the package from the `DESCRIPTION` file.
-* Uninstalls the package from the local library.
+* Retains the package if another dependency still requires it; otherwise prunes it.
 * Updates the `renv.lock` file through the same source-policy checks and prunes
   orphan dependencies.
 * **Dry Run:** Use `dry_run = TRUE` to preview without changing files.
 
 ### `intent::sync(dry_run = FALSE, prune = TRUE)`
 
-Syncs `renv.lock` to match the `DESCRIPTION` file, then restores the local library.
+Reconciles declared dependencies with resolved and installed state.
 
-* Installs packages declared in `DESCRIPTION` but missing from the lockfile.
-* **Prune:** Removes packages from the lockfile that are no longer declared (on by default; disable with `prune = FALSE`).
+* Resolves missing dependencies and incompatible versions or sources, preferring compatible locks.
+* Restores a valid lock without rewriting it, including when the library is empty.
+* **Prune:** Removes true orphans outside the dependency closure; prune = FALSE retains extras.
 * **Source Policy:** Validates requested sources and candidate lockfiles before
   replacing `renv.lock` in strict mode.
 * **Dry Run:** Use `dry_run = TRUE` to preview planned actions.
@@ -261,7 +271,7 @@ Reports drift between manifest, lockfile, and library **without changing anythin
 
 * Lists packages declared but not locked.
 * Lists packages locked but not declared.
-* Lists packages locked but not installed in the local library.
+* Lists missing installations, incompatible declarations, and installed version/source drift.
 * Reports source policy violations, such as repository packages resolved from a
   repository name not declared in `Config/intent/repos/`.
 * Returns a structured object with `print()` and JSON (`as.character()`) output.
@@ -272,7 +282,8 @@ Reports drift between manifest, lockfile, and library **without changing anythin
 Verifies the project contract **without changing anything**.
 
 * Checks that packages declared in `DESCRIPTION` are present in `renv.lock`.
-* Checks that locked packages are installed in the project library.
+* Checks locked versions and source identities against the project library.
+* Fails only on errors; warnings and information remain visible.
 * Checks that `renv.lock` repositories match `Config/intent/repos/`.
 * Checks source policy violations and lockfile packages outside the dependency
   closure.
@@ -497,205 +508,23 @@ intent::sync()
 
 ---
 
-## Specifications
+## Workflow contracts and backend boundaries
 
-To build **`intent`** as a robust orchestrator, the specifications must clearly define how each function interacts with the three underlying pillars: the **Manifest** (`DESCRIPTION`), the **Environment** (`renv`), and the **Engine** (`pak`).
+Intent owns dependency declarations, validation and user-facing verbs.
+Environment libraries, activation and package transport remain backend mechanics.
 
-Below are the technical specifications for the core API.
+- [Product boundary](docs/06-product-boundary.md)
+- [Workflow contracts](docs/08-workflow-contracts.md)
+- [Implementation decisions and acceptance scenarios](docs/refactors/029-dependency-contract-enforcement.md)
+- [Backend evidence and limitations](docs/09-backend-capability-matrix.md)
 
----
+A compatible lock is restored without rewriting it. Missing or incompatible
+resolved state triggers staged resolution, preferring compatible locked versions.
+The candidate is validated before target restoration and committed only after
+installed-state verification succeeds. A failed operation retains the official
+lock; manifest edits may remain pending and library rollback is not guaranteed.
+Correct the failure and rerun sync.
 
-## 1. `intent::init()`
-
-**Objective:** Transform a directory into a managed `intent` workspace.
-
-**Arguments:**
-
-* `path`: Directory path (defaults to current).
-* `repos`: Character vector of CRAN-like repositories. Defaults to
-  `c(RSPM = "https://packagemanager.posit.co/cran/latest")`.
-* `install_self`: `"hydrate"` copies the currently installed `intent` package
-  into the project library when possible. `"never"` leaves `intent` external.
-* `confirm_repos`: Ask before writing the default repository in interactive
-  sessions.
-
-**Logical Flow:**
-
-1. **DESCRIPTION Classification:** Before writing files, classify the project as
-   an intent manifest, a non-intent manifest, an invalid manifest, or a missing
-   manifest.
-2. **Safety Gate:** Stop before writing when `DESCRIPTION` is non-intent or
-   invalid, or when `renv.lock` / `renv/` exists without `DESCRIPTION`.
-3. **Infrastructure:** Create `DESCRIPTION` only for new projects without
-   existing renv state.
-4. **Repository Default:** If no `repos` are provided and none exist in an
-   existing DESCRIPTION, default to Posit Package Manager.
-5. **State Init:** Call `renv::init(bare = TRUE)`. This creates the `renv/` folder and `renv.lock` without scanning files.
-6. **Policy Setting:** Set `renv::settings$snapshot.type("explicit")`. This is non-negotiable for the `intent` workflow.
-7. **Bootstrapping:** Write `source("renv/activate.R")` to `.Rprofile`.
-8. **Tool Constraints:** Preserve user constraints for `intent`, `pak`, and
-   `renv`; otherwise write default bootstrap constraints.
-9. **Tool Hydration:** If `install_self = "hydrate"`, copy the already-installed
-   `intent` package from the current library paths into the project library when
-   available, then snapshot it.
-10. **Engine Config:** Set `RENV_CONFIG_PAK_ENABLED=TRUE` in `.Renviron` to enable `pak` as the installation engine.
-
-**Exit State:**
-
-A project ready for `intent::add()`. If self-hydration succeeds,
-`library(intent)` works after restarting inside the project. If it does not,
-the project is still initialized and `intent` can be installed from the user's
-chosen package source.
-
-Files created or modified by `init()`:
-
-* `DESCRIPTION` — project manifest with `Config/intent/repos/*` fields
-* `renv.lock` — exact dependency versions (in "explicit" snapshot mode)
-* `renv/` — `renv` infrastructure (activation scripts, settings)
-* `.Rprofile` — sources `renv/activate.R` to auto-load the project library
-* `.Renviron` — sets `RENV_CONFIG_PAK_ENABLED = TRUE`
-* `.Rbuildignore` — created by `renv::init()` when `DESCRIPTION` contains a
-  `Package` field; adds `^renv$` and `^renv.lock$` so these files are excluded
-  from `R CMD build`. This is standard `renv` behaviour and is harmless for
-  non-package projects.
-
----
-
-## 2. `intent::add()`
-
-**Objective:** The "uv add" equivalent. Declare, install, and lock a dependency.
-
-* **Arguments:**
-  * `pkgs`: Character vector of package names (supports `user/repo` for GitHub).
-  * `dev`: Defaults to `FALSE`. If `FALSE`, adds packages to `"Imports"` section. If `TRUE`, adds packages to `"Suggests"` section.
-  * `dry_run`: Defaults to `FALSE`. If `TRUE`, returns a plan without installing or writing files.
-
-* **Logical Flow:**
-
-1. **Validation:** Check if `pkgs` are valid strings.
-2. **Source Preflight:** Check requested package references and dependency
-   overrides against source policy.
-3. **Manifest Update:** Use the `desc` package to append packages to the `DESCRIPTION` file.
-4. **Installation:** Install packages through the backend with `pak`.
-
-5. **Locking:** Snapshot to a candidate lockfile, validate source provenance,
-   then replace the official `renv.lock` only if policy allows it.
-
-* **Exit State:** Package is in `DESCRIPTION`, installed in `renv/library`, and recorded in `renv.lock`.
-
-* **Version Constraints:** `add()` records the installed version as a `>=`
-  lower-bound constraint in `DESCRIPTION` (e.g., `dplyr (>= 1.1.4)`). For
-  stricter pinning (exact versions, upper bounds, or non-repository sources),
-  use [Dependency Overrides](#dependency-overrides) via
-  `Config/intent/Imports/<pkg>` in `DESCRIPTION`.
-
----
-
-## 3. `intent::remove()`
-
-**Objective:** Reverse the `add` process cleanly.
-
-* **Arguments:**
-  * `pkgs`: Character vector of package names to remove.
-  * `dry_run`: Defaults to `FALSE`. If `TRUE`, returns a plan without removing files.
-
-* **Logical Flow:**
-
-1. **Manifest Update:** Remove packages from `DESCRIPTION` using `desc::desc_del_dep()`.
-2. **Cleanup:** Call `renv::remove(pkgs)`. This deletes the files from the project-local library.
-3. **Locking:** Snapshot to a candidate lockfile, validate source provenance,
-   then replace the official `renv.lock` only if policy allows it.
-
-* **Exit State:** Package and its orphans are removed from the disk and the lockfile.
-
----
-
-## 4. `intent::sync()`
-
-**Objective:** Ensure the local library perfectly matches the `DESCRIPTION` file.
-
-* **Arguments:**
-  * `dry_run`: Defaults to `FALSE`. If `TRUE`, returns a plan without changing files.
-  * `prune`: Defaults to `TRUE`. If `TRUE`, removes packages from the lockfile
-    that are no longer declared in `DESCRIPTION`.
-
-* **Logical Flow:**
-
-1. **Comparison:** Compare `DESCRIPTION` against the current contents of `renv.lock`:
-    * What packages are in `DESCRIPTION` but not in `renv.lock`?
-    * What packages are in `renv.lock` but not in `DESCRIPTION`?
-2. Preflight requested sources and overrides against source policy.
-3. Install missing dependencies.
-4. Remove true orphan dependencies (when `prune = TRUE`), preserving transitive
-   dependencies reachable from declared packages.
-5. Snapshot to a candidate lockfile and validate source provenance.
-6. Restore the library from the updated lockfile.
-
-* **Exit State:** The local environment is a perfect binary mirror of the `renv.lock` file.
-
----
-
-## 5. `intent::status()`
-
-**Objective:** Report drift without mutating state.
-
-* **Arguments:**
-  * `project`: Path to the project directory. Defaults to the current intent project.
-
-* **Logical Flow:**
-
-1. Read declared packages from `DESCRIPTION`.
-2. Read locked packages from `renv.lock`.
-3. Read installed packages from the project library.
-4. Read repository and source policy from `Config/intent/`.
-5. Report differences between the three sources of truth.
-6. Report source policy violations.
-
-* **Exit State:** No files or packages are changed. Returns an `intent_status`
-  object. Use `as.character(status())` or `intent status --json` for
-  machine-readable output.
-
----
-
-## 6. `intent::verify()`
-
-**Objective:** Verify that the project contract is internally consistent.
-
-* **Arguments:**
-  * `project`: Path to the project directory. Defaults to the current intent project.
-
-* **Logical Flow:**
-
-1. Read status from `DESCRIPTION`, `renv.lock`, and the project library.
-2. Check that declared dependencies are locked.
-3. Check that locked packages are installed.
-4. Check that lockfile repositories match `Config/intent/repos/`.
-5. Check source policy violations.
-6. Check that every lockfile package's Repository name is resolvable against
-   declared `Config/intent/repos/` entries (via direct name match, URL match, or
-   lockfile `R$Repositories` URL match).
-7. Check that repository URLs are platform-agnostic (no `__linux__`,
-   `__macos__`, or `manylinux` segments) to ensure cross-platform restore safety.
-8. Check for lockfile packages outside the dependency closure rooted at
-   `DESCRIPTION` dependencies and bootstrap packages.
-
-* **Exit State:** No files or packages are changed. Returns an
-  `intent_verification` object. Use `as.character(verify())` or
-  `intent verify --json` for machine-readable output. The CLI exits with an
-  error when verification fails.
-
----
-
-## Summary of Interaction Logic
-
-| Function | Primary Tool | Target File | Impact |
-| --- | --- | --- | --- |
-| `init` | `renv` | `.Rprofile` | Environment Architecture |
-| `adopt` | `desc` + `renv` | `DESCRIPTION` | Migration |
-| `add` | `desc` + `pak` | `DESCRIPTION` | Manifest & Library |
-| `remove` | `desc` + `renv` | `DESCRIPTION` | Manifest & Library |
-| `sync` | `renv` + `pak` | `renv.lock` | Library State |
-| `status` | `desc` + `renv` | (read-only) | Drift Inspection |
-| `verify` | `desc` + `renv` | (read-only) | Contract Verification |
-
----
+Exact historical versions use explicit package references. Automatic search
+over archived versions under upper constraints is not implemented by the current
+resolver; failure must never silently relax the declared constraint.

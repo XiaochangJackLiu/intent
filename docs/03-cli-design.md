@@ -13,6 +13,7 @@ intent sync [--project path] [--dry-run] [--json] [--no-prune]
 intent status [--project path] [--json]
 intent verify [--project path] [--json]
 intent doctor [--project path] [--json]
+intent adopt [path] [--project path] [--repo NAME=URL]... [--strategy name] [--apply | --dry-run] [--json] [--yes]
 ```
 
 ## Common Flags
@@ -26,13 +27,19 @@ These flags are accepted by multiple commands:
 
 --dry-run          Report planned actions without changing any
                    files or installed packages. Accepted by add,
-                   remove, and sync. Combine with --json for
-                   machine-readable output.
+                   remove, sync, and adopt. Human-readable previews
+                   print the plan explicitly. Adopt previews by default.
 
 --json             Output machine-readable JSON instead of
                    human-readable text. Accepted by status, verify,
-                   doctor, and sync (only with --dry-run).
+                   doctor, adopt, and sync (only with --dry-run).
+                   It is not accepted by add or remove.
 ```
+
+Options are validated per command before command dispatch. Unsupported options
+are errors. For adopt, --apply and --dry-run are mutually exclusive, and --yes
+does not enable apply mode. For sync, --json without --dry-run is an error.
+An option that needs a value cannot consume another --option as its value.
 
 ## Command Semantics
 

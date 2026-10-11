@@ -13,7 +13,10 @@ new_intent_status <- function(
   source_violations = intent_source_violations_empty(),
   r_version = NULL,
   r_constraint = NULL,
-  lockfile_r_version = NULL
+  lockfile_r_version = NULL,
+  incompatible_with_manifest = character(),
+  version_mismatches = character(),
+  source_mismatches = character()
 ) {
   structure(
     list(
@@ -28,7 +31,10 @@ new_intent_status <- function(
       source_violations = source_violations,
       r_version = r_version %||% as.character(getRversion()),
       r_constraint = r_constraint,
-      lockfile_r_version = lockfile_r_version
+      lockfile_r_version = lockfile_r_version,
+      incompatible_with_manifest = incompatible_with_manifest,
+      version_mismatches = version_mismatches,
+      source_mismatches = source_mismatches
     ),
     class = "intent_status"
   )
@@ -103,10 +109,7 @@ intent_r_constraint <- function(project) {
 }
 
 intent_manifest_packages <- function(project) {
-  desc_deps <- desc::desc_get_deps(file = file.path(project, "DESCRIPTION"))
-  target_types <- c("Imports", "Suggests")
-  packages <- desc_deps$package[desc_deps$type %in% target_types]
-  sort(unique(packages[packages != "R"]))
+  intent_dependency_specs(project)$packages
 }
 
 intent_locked_packages <- function(project) {
@@ -162,8 +165,12 @@ intent_base_packages <- local({
 })
 
 intent_lock_package_dependencies <- function(record) {
-  fields <- c("Depends", "Imports", "LinkingTo")
+  fields <- c("Depends", "Imports", "LinkingTo", "Requirements")
   deps <- unlist(record[intersect(fields, names(record))], use.names = FALSE)
+  deps <- unlist(
+    strsplit(as.character(deps), ",", fixed = TRUE),
+    use.names = FALSE
+  )
   deps <- gsub("\\s*\\(.*\\)$", "", deps)
   deps <- trimws(deps)
   deps <- deps[nzchar(deps)]
@@ -189,7 +196,7 @@ intent_lockfile_provenance <- function(lock) {
       package = pkg,
       source = source,
       repository = record[["Repository"]] %||% NA_character_,
-      repository_url = intent_lock_record_repository_url(record),
+      repository_url = intent_record_repo_url(record, lock),
       stringsAsFactors = FALSE
     )
   })
@@ -210,9 +217,6 @@ intent_lockfile_provenance <- function(lock) {
 intent_lock_record_source <- function(record) {
   source <- tolower(record[["Source"]] %||% "")
 
-  if (identical(source, "repository") || !is.null(record[["Repository"]])) {
-    return("repository")
-  }
   if (source %in% c("github", "bioconductor", "bioc", "url", "local")) {
     return(if (identical(source, "bioconductor")) "bioc" else source)
   }
@@ -230,6 +234,10 @@ intent_lock_record_source <- function(record) {
     if (remote_type %in% c("github", "bioc", "url", "local")) {
       return(remote_type)
     }
+  }
+
+  if (identical(source, "repository") || !is.null(record[["Repository"]])) {
+    return("repository")
   }
 
   "unknown"
@@ -298,6 +306,23 @@ intent_check_source_policy <- function(lock, repos, source_policy) {
 intent_verify_project_issues <- function(project, status) {
   issues <- intent_verification_issues_empty()
 
+  for (field in c(
+    "incompatible_with_manifest",
+    "version_mismatches",
+    "source_mismatches"
+  )) {
+    if (length(status[[field]])) {
+      issues <- rbind(
+        issues,
+        intent_verification_issue(
+          field,
+          "error",
+          paste(field, paste(status[[field]], collapse = ", "), sep = ": ")
+        )
+      )
+    }
+  }
+
   if (length(status$missing_from_lockfile) > 0) {
     issues <- rbind(
       issues,
@@ -354,7 +379,14 @@ intent_verify_project_issues <- function(project, status) {
   issues <- rbind(issues, intent_verify_repository_issues(lock, repos))
   issues <- rbind(
     issues,
-    intent_verify_source_policy_issues(status$source_violations)
+    intent_verify_source_policy_issues(
+      status$source_violations,
+      severity = if (identical(status$source_policy$mode, "error")) {
+        "error"
+      } else {
+        "warning"
+      }
+    )
   )
   issues <- rbind(
     issues,
@@ -517,37 +549,17 @@ intent_verify_r_version_issues <- function(
 
 # Parse a constraint like ">= 4.5" into (op, major, minor)
 parse_r_version_constraint <- function(constraint) {
-  m <- regmatches(
-    constraint,
-    regexec("^(>=|>|==|<=|<)\\s*(\\d+)\\.(\\d+)", constraint)
-  )[[1]]
-  if (length(m) < 4) {
-    return(NULL)
+  parsed <- bootstrap_parse_version_constraint(constraint)
+  if (is.null(parsed) && !constraint %in% c("", "*")) {
+    stop("Unsupported R version constraint: ", constraint, call. = FALSE)
   }
-  list(
-    op = m[[2]],
-    major = as.integer(m[[3]]),
-    minor = as.integer(m[[4]])
-  )
+  parsed
 }
 
 r_version_satisfies <- function(version, constraint) {
-  parts <- as.integer(strsplit(version, "[.-]")[[1]])
-  v_major <- parts[[1]]
-  v_minor <- if (length(parts) >= 2) parts[[2]] else 0L
-
-  switch(
-    constraint$op,
-    ">=" = v_major > constraint$major ||
-      (v_major == constraint$major && v_minor >= constraint$minor),
-    ">" = v_major > constraint$major ||
-      (v_major == constraint$major && v_minor > constraint$minor),
-    "==" = v_major == constraint$major && v_minor == constraint$minor,
-    "<=" = v_major < constraint$major ||
-      (v_major == constraint$major && v_minor <= constraint$minor),
-    "<" = v_major < constraint$major ||
-      (v_major == constraint$major && v_minor < constraint$minor),
-    FALSE
+  intent_version_satisfies(
+    version,
+    paste(constraint$operator, constraint$version)
   )
 }
 
@@ -656,7 +668,7 @@ intent_lock_repositories <- function(lock) {
   repos
 }
 
-intent_verify_source_policy_issues <- function(violations) {
+intent_verify_source_policy_issues <- function(violations, severity = "error") {
   if (is.null(violations) || nrow(violations) == 0) {
     return(intent_verification_issues_empty())
   }
@@ -667,7 +679,7 @@ intent_verify_source_policy_issues <- function(violations) {
       violation <- violations[i, , drop = FALSE]
       intent_verification_issue(
         "source_policy",
-        "error",
+        severity,
         sprintf("%s: %s", violation$package, violation$reason)
       )
     })
@@ -685,7 +697,7 @@ intent_verify_lockfile_closure_issues <- function(lock, roots) {
 
   intent_verification_issue(
     "lockfile_closure",
-    "error",
+    "warning",
     paste(
       "renv.lock contains packages not reachable from DESCRIPTION or bootstrap packages:",
       paste(zombies, collapse = ", ")
@@ -694,83 +706,29 @@ intent_verify_lockfile_closure_issues <- function(lock, roots) {
 }
 
 intent_verify_lockfile_repo_resolvability <- function(lock, repos) {
-  packages <- lock$Packages %||% list()
-  if (length(packages) == 0) {
-    return(intent_verification_issues_empty())
-  }
-
   issues <- intent_verification_issues_empty()
-  repo_names <- names(repos)
-
-  for (pkg_name in names(packages)) {
-    record <- packages[[pkg_name]]
-    repo <- record[["Repository"]]
-    if (is.null(repo) || is.na(repo) || !nzchar(repo)) {
+  provenance <- intent_lockfile_provenance(lock)
+  for (i in seq_len(nrow(provenance))) {
+    row <- provenance[i, , drop = FALSE]
+    if (
+      row$package %in% c("intent", "pak", "renv") || row$source != "repository"
+    ) {
       next
     }
-
-    # Direct name match -- resolvable
-    if (repo %in% repo_names) {
-      next
-    }
-
-    # URL-match via package record's own URL fields
-    record_url <- intent_lock_record_repository_url(record)
-    if (!is.na(record_url) && nzchar(record_url)) {
-      norm_record_url <- normalize_repo_url(record_url)
-      url_matched <- FALSE
-      for (decl_name in repo_names) {
-        if (
-          identical(normalize_repo_url(repos[[decl_name]]), norm_record_url)
-        ) {
-          url_matched <- TRUE
-          break
-        }
-      }
-      if (url_matched) {
-        next
-      }
-    }
-
-    # URL-match via lockfile R$Repositories entry for this repo name
-    lock_repos <- lock$R$Repositories %||% character()
-    if (repo %in% names(lock_repos)) {
-      lock_repo_url <- lock_repos[[repo]]
-      if (!is.na(lock_repo_url) && nzchar(lock_repo_url)) {
-        norm_lock_url <- normalize_repo_url(lock_repo_url)
-        url_matched <- FALSE
-        for (decl_name in repo_names) {
-          if (
-            identical(normalize_repo_url(repos[[decl_name]]), norm_lock_url)
-          ) {
-            url_matched <- TRUE
-            break
-          }
-        }
-        if (url_matched) {
-          next
-        }
-      }
-    }
-
-    # Unresolvable
-    issues <- rbind(
-      issues,
-      intent_verification_issue(
-        "lockfile_repo_resolvability",
-        "error",
-        sprintf(
-          "Package '%s' references repository '%s' which is not declared in Config/intent/repos",
-          pkg_name,
-          repo
+    verdict <- intent_check_repository_policy(row, repos)
+    if (nrow(verdict)) {
+      issues <- rbind(
+        issues,
+        intent_verification_issue(
+          "lockfile_repo_resolvability",
+          "error",
+          paste0("Package '", row$package, "': ", verdict$reason)
         )
       )
-    )
+    }
   }
-
   issues
 }
-
 intent_source_violation <- function(package, source, repository, reason) {
   data.frame(
     package = package,
@@ -884,7 +842,7 @@ repo_url_is_platform_specific <- function(url) {
 }
 
 intent_check_platform_repos <- function(repos, source_policy) {
-  if (is.null(source_policy) || identical(source_policy$mode, "off")) {
+  if (is.null(source_policy)) {
     return(intent_verification_issues_empty())
   }
 
@@ -926,10 +884,5 @@ intent_check_platform_repos <- function(repos, source_policy) {
 INTENT_KNOWN_PPM_NAMES <- c("RSPM")
 
 intent_library_packages <- function(project) {
-  library_path <- backend_library(project)
-  if (!dir.exists(library_path)) {
-    return(character())
-  }
-
-  sort(basename(list.dirs(library_path, full.names = TRUE, recursive = FALSE)))
+  sort(names(backend_read_library(project)))
 }

@@ -3,6 +3,8 @@ test_that("init defaults to CRAN when no repos provided", {
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(project, repos) {
     expect_equal(repos[["CRAN"]], "https://cran.r-project.org")
   })
@@ -23,6 +25,8 @@ test_that("init hydrates intent by default", {
 
   hydrated <- FALSE
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(project, repos) {
     dir.create(file.path(project, "renv"), recursive = TRUE)
   })
@@ -46,6 +50,8 @@ test_that("init can leave intent as an external tool", {
 
   install_self_seen <- NULL
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(project, repos) {
     dir.create(file.path(project, "renv"), recursive = TRUE)
   })
@@ -83,6 +89,8 @@ test_that("init refuses existing non-intent DESCRIPTION without mutation", {
   original_lock <- readLines(lock_path)
   called <- FALSE
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {
     called <<- TRUE
   })
@@ -108,6 +116,8 @@ test_that("init refuses invalid DESCRIPTION before backend work", {
   writeLines("not a valid DESCRIPTION file", desc_path)
 
   called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {
     called <<- TRUE
   })
@@ -130,6 +140,8 @@ test_that("init refuses missing DESCRIPTION with existing renv.lock", {
   writeLines("existing lock", lock_path)
 
   called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {
     called <<- TRUE
   })
@@ -179,6 +191,8 @@ test_that("init allows intent manifest and initializes backend when renv is abse
 
   backend_called <- FALSE
   sync_called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(project, repos) {
     backend_called <<- TRUE
     expect_equal(repos[["CRAN"]], "https://example.test")
@@ -190,7 +204,7 @@ test_that("init allows intent manifest and initializes backend when renv is abse
   cmd_init(path = tmp_dir, install_self = "never")
 
   expect_true(backend_called)
-  expect_false(sync_called)
+  expect_true(sync_called)
 })
 
 test_that("init allows intent manifest and syncs when renv exists", {
@@ -209,6 +223,8 @@ test_that("init allows intent manifest and syncs when renv exists", {
 
   backend_called <- FALSE
   sync_called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {
     backend_called <<- TRUE
   })
@@ -235,10 +251,12 @@ test_that("init syncs intent manifest with existing lockfile but no renv directo
     ),
     file.path(tmp_dir, "DESCRIPTION")
   )
-  writeLines("existing lock", file.path(tmp_dir, "renv.lock"))
+  contract_lock(tmp_dir, packages = list())
 
   backend_called <- FALSE
   sync_called <- FALSE
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {
     backend_called <<- TRUE
   })
@@ -257,6 +275,8 @@ test_that("init writes default bootstrap version constraints", {
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {})
 
   cmd_init(path = tmp_dir, install_self = "never")
@@ -292,6 +312,8 @@ test_that("init preserves user bootstrap version constraints", {
     file.path(tmp_dir, "DESCRIPTION")
   )
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {})
 
   cmd_init(path = tmp_dir, install_self = "never")
@@ -307,6 +329,8 @@ test_that("intent hydration failure does not fail init", {
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(project, repos) {
     dir.create(file.path(project, "renv"), recursive = TRUE)
   })
@@ -330,7 +354,7 @@ test_that("intent hydration failure does not fail init", {
   )
 })
 
-test_that("intent hydration force-snapshots local tool installs", {
+test_that("intent hydration defers snapshot to shared reconciliation", {
   tmp_dir <- tempfile()
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
@@ -359,10 +383,11 @@ test_that("intent hydration force-snapshots local tool installs", {
 
   maybe_hydrate_intent(tmp_dir, sources = character(), install_self = "hydrate")
 
-  expect_true(force_seen)
+  expect_null(force_seen)
 })
 
 test_that("intent::init creates necessary files", {
+  withr::local_envvar(RENV_CONFIG_AUTOLOADER_ENABLED = "TRUE")
   # Use a temp directory for the project
   tmp_dir <- file.path(
     Sys.getenv("R_USER_CACHE_DIR", unset = tempdir()),
@@ -411,7 +436,11 @@ test_that("intent::init creates necessary files", {
   )
   ### check repos -- user's name preserved as-is
   renv_repos <- renv_lock$R$Repositories
-  expect_equal(names(renv_repos), c("CRAN"))
+  expect_true("CRAN" %in% names(renv_repos))
+  expect_true(all(
+    normalize_repo_url(renv_repos) ==
+      "https://packagemanager.posit.co/cran/latest"
+  ))
   expect_equal(
     renv_repos[[1]],
     "https://packagemanager.posit.co/cran/latest"
@@ -598,6 +627,8 @@ test_that("init preserves user bootstrap constraints byte-identically in DESCRIP
   )
   writeLines(desc_lines, file.path(tmp_dir, "DESCRIPTION"))
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {})
 
   cmd_init(path = tmp_dir, install_self = "never")
@@ -622,6 +653,8 @@ test_that("init warns on platform-specific repo URL", {
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
 
+  mockery::stub(cmd_init, "intent_sync_project", function(...) NULL)
+  mockery::stub(cmd_init, "backend_set_explicit", function(...) NULL)
   mockery::stub(cmd_init, "backend_init", function(...) {})
 
   expect_warning(

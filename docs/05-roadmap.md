@@ -4,6 +4,17 @@ This roadmap moves the project from the current implementation toward a clear
 product and architecture. It intentionally starts with documentation and design
 before deeper code changes.
 
+## Current Next Steps (2026-10-11)
+
+The accepted [product boundary](06-product-boundary.md) and proposed
+[next-step plan](07-next-steps.md) define the current direction: preview safety,
+user verb contracts, renv/pak capability evaluation, scoped implementation, then
+feature selection. Backend replacement decisions require capability evidence.
+
+The phases below record the original development roadmap; they are not a fresh
+implementation queue or proof that every acceptance criterion has been met.
+See the [consistency review](review-2026-10-11.md) for remaining discrepancies.
+
 ## Phase 0: Stabilize Direction
 
 - Add development docs under `docs/`.
@@ -81,9 +92,11 @@ The next implementation pass should answer:
 
 - Should `init()` have a default repository, or should it require explicit
   repository configuration?
-  → **Resolved (July 2026):** `init()` defaults to Posit Package Manager
-  (`https://packagemanager.posit.co/cran/latest`). Users can override with the
-  `repos` argument. See refactor 009.
+  → **Historical decision (July 2026):** refactor 009 selected Posit Package
+  Manager. The 2026-10-11 review found that implementation now defaults to CRAN
+  while other documentation still specifies PPM. Reconcile this decision in
+  stage B of the current plan; do not treat the historical entry as resolution
+  of that conflict.
 - What is the exact project discovery algorithm?
   → **Resolved:** Implemented in `resolve_project()` in `R/utils.R`.
 - What data structure represents drift?

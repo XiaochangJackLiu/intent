@@ -334,3 +334,9 @@ Add focused tests for:
     when `confirm = TRUE`.
   - Add CLI flags for `--repos`, `--strategy`, `--yes` to `cli_adopt()`.
   - Add `intent::adopt()` to README documentation and pkgdown site.
+
+## Superseding decision (2026-10-11)
+
+Refactor 029 preserves existing bootstrap constraints and routes adoption
+through staged reconciliation. The migration plan now lists configuration,
+tool lifecycle, hydration and reconciliation effects.

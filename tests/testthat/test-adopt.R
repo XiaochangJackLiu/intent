@@ -253,7 +253,7 @@ test_that("adopt_build_issues reports lockfile drift", {
   expect_match(lockfile_issues$message[[1]], "glue")
 })
 
-test_that("adopt with override=TRUE resolves constraint conflicts and reports overrides", {
+test_that("adopt preserves existing tool constraints", {
   tmp_dir <- tempfile()
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE))
@@ -284,7 +284,11 @@ test_that("adopt with override=TRUE resolves constraint conflicts and reports ov
     ,
     drop = FALSE
   ]
-  expect_true(any(grepl("overrides existing", bootstrap_issues$message)))
+  expect_false(any(grepl("overrides existing", bootstrap_issues$message)))
+  expect_equal(
+    plan$bootstrap$preserve$version[plan$bootstrap$preserve$package == "renv"],
+    "< 0.9.0"
+  )
 })
 
 test_that("adopt apply mode writes repos to DESCRIPTION", {

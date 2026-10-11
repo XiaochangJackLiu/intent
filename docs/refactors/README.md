@@ -61,3 +61,5 @@ plan, and updated after implementation with the actual result.
 - [025 Bootstrap Plan User-Facing Output](025-bootstrap-plan-ux.md)
 - [026 Init Classification Hardening](026-init-classification-hardening.md)
 - [027 Cross-Platform Restore Safety](027-cross-platform-restore.md)
+- [028 CLI Preview Safety and Output](028-cli-preview-safety.md)
+- [029 Dependency Contract Enforcement](029-dependency-contract-enforcement.md)

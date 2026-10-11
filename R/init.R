@@ -12,6 +12,8 @@
 #' with a default lower-bound version constraint. Minimum `pak` and `renv`
 #' constraints are copied from the running `intent` package metadata when
 #' declared there; existing user constraints are preserved.
+#' Initialization then reconciles all declared dependencies. Tool lifecycle is
+#' recorded in `Config/intent/tools/intent` as managed or external.
 #'
 #' @param path Character string. Path to the new project directory. Defaults to current working directory.
 #' @param repos Character vector. Named repositories to use. Defaults to
@@ -22,7 +24,8 @@
 #'   repository configuration on every init.
 #' @param r_version R version constraint to write into `DESCRIPTION` as
 #'   `Depends: R (>= x.y)`.  Use `NULL` (the default) to record the
-#'   current session's major.minor version, or `NA` to skip writing an R
+#'   current session's major.minor version when no R constraint exists; preserves
+#'   an existing constraint. Use `NA` or `FALSE` to skip writing an R
 #'   version constraint.
 #' @param install_self Character string. `"hydrate"` attempts to copy the
 #'   currently installed `intent` package from the active library paths into the

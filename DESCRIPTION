@@ -37,4 +37,4 @@ VignetteBuilder: knitr
 Config/intent/repos/RSPM: https://packagemanager.posit.co/cran/latest
 Config/intent/repos/CRAN: https://packagemanager.posit.co/cran/latest
 Config/intent/repos/R-MULTIVERSE: https://community.r-multiverse.org
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.1

@@ -12,9 +12,11 @@ sync(project = NULL, dry_run = FALSE, prune = TRUE)
 \item{dry_run}{Logical. If \code{TRUE}, returns the planned actions without changing files or packages.}
 
 \item{prune}{Logical. If \code{TRUE} (default), removes packages from the lockfile
-that are no longer declared in \code{DESCRIPTION}.}
+outside the dependency closure of \code{DESCRIPTION}. If \code{FALSE}, retains extras.}
 }
 \description{
-Ensures the \code{DESCRIPTION} file matches the \code{renv.lock} file exactly.
-This is equivalent to \code{renv::restore(clean = TRUE)}.
+Resolves dependencies whose locked versions or sources no longer satisfy
+\code{DESCRIPTION}, preferring compatible locked versions. Validates a staged
+candidate, restores the project library, and commits the lock after success.
+An already compatible lock is restored without rewriting it.
 }

@@ -1,8 +1,10 @@
 # renv Boundary
 
-`renv` is useful and should remain part of the first implementation. The design
-problem is not that `intent` uses `renv`; the problem is when `intent` becomes
-defined by `renv` session behavior.
+`renv` is part of the current implementation. Under the accepted
+[product boundary](06-product-boundary.md), intent owns user-facing dependency
+contracts and workflows while environment management remains a separate backend
+responsibility. The [capability assessment](09-backend-capability-matrix.md) records what has been evaluated and what remains unresolved. Keep suitable mechanisms and replace those that cannot satisfy the
+required behavior; renv session behavior must not define intent's semantics.
 
 ## Target Relationship
 
@@ -17,7 +19,7 @@ defined by `renv` session behavior.
 - project invariant verification
 - user-facing commands
 
-`renv` owns backend mechanics:
+Backend mechanics currently delegated to `renv`, subject to capability evaluation:
 
 - project-local library management
 - lockfile writing and reading

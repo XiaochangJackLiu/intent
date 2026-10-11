@@ -53,4 +53,6 @@ dependencies and does not infer new dependencies from \code{renv.lock}.
 By default, \code{adopt()} is non-mutating: it returns an
 \code{adoption_plan} that describes what would change. Pass
 \code{dry_run = FALSE} to apply the changes.
+Existing dependency constraints are preserved. The plan includes backend
+configuration, tool hydration and dependency reconciliation effects.
 }

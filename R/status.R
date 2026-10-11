@@ -49,6 +49,9 @@ print.intent_status <- function(x, ...) {
   print_status_count("Missing from lockfile", x$missing_from_lockfile)
   print_status_count("Extra in lockfile", x$extra_in_lockfile)
   print_status_count("Missing from library", x$missing_from_library)
+  print_status_count("Incompatible with manifest", x$incompatible_with_manifest)
+  print_status_count("Installed version mismatch", x$version_mismatches)
+  print_status_count("Installed source mismatch", x$source_mismatches)
   print_source_violations(x$source_violations)
 
   invisible(x)
@@ -209,6 +212,26 @@ print.adoption_plan <- function(x, ...) {
   if (nrow(x$actions) > 0) {
     add_rows <- x$actions[x$actions$action == "add", , drop = FALSE]
     preserve_rows <- x$actions[x$actions$action == "preserve", , drop = FALSE]
+    effects <- x$actions[
+      !x$actions$action %in% c("add", "preserve"),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(effects)) {
+      cat("Workflow effects:\n")
+      for (i in seq_len(nrow(effects))) {
+        cat(
+          "  - ",
+          effects$action[[i]],
+          " ",
+          effects$target[[i]],
+          ": ",
+          effects$detail[[i]],
+          "\n",
+          sep = ""
+        )
+      }
+    }
 
     if (nrow(add_rows) > 0) {
       cat("Actions:\n")

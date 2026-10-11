@@ -3,6 +3,10 @@
 `intent` should be structured as a small product core with separate interfaces
 and backend adapters.
 
+The accepted [product boundary](06-product-boundary.md) makes intent responsible
+for user-facing dependency contracts and workflows. Environment management is
+a separate backend responsibility. The [capability assessment](09-backend-capability-matrix.md) records retained mechanisms, adaptations and remaining gaps.
+
 ## Target Layers
 
 ```text
@@ -20,8 +24,8 @@ The architectural contract is:
 ```text
 DESCRIPTION declares.
 intent enforces.
-renv executes.
-renv.lock records.
+Backends execute.
+The lockfile records resolved state (currently renv.lock).
 ```
 
 `DESCRIPTION` and `Config/intent/` define the project contract. `renv.lock`

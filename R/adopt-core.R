@@ -345,11 +345,12 @@ adopt_build_plan <- function(
   rproject,
   strategy,
   effective_repos,
-  confirm
+  confirm,
+  install_self = "hydrate"
 ) {
   current_repos <- get_repos(file.path(project_dir, "DESCRIPTION"))
 
-  bootstrap_plan <- bootstrap_dependency_plan(rproject, override = TRUE)
+  bootstrap_plan <- bootstrap_dependency_plan(rproject, override = FALSE)
 
   comparison <- adopt_compare_lockfile(project_dir)
 
@@ -360,6 +361,25 @@ adopt_build_plan <- function(
     current_repos,
     bootstrap_plan,
     has_renviron_pak
+  )
+  actions <- rbind(
+    actions,
+    adoption_action(
+      "configure",
+      "renv",
+      "Initialize infrastructure when absent; set explicit snapshot mode"
+    ),
+    adoption_action("configure", "Config/intent/tools/intent", install_self),
+    adoption_action(
+      if (install_self == "hydrate") "hydrate" else "external",
+      "intent",
+      "Tool lifecycle"
+    ),
+    adoption_action(
+      "reconcile",
+      "library and renv.lock",
+      "Resolve necessary dependencies, validate, restore and commit candidate lock"
+    )
   )
 
   issues <- adopt_build_issues(
@@ -437,13 +457,25 @@ adopt_apply_plan <- function(
   }
 
   # Set renv snapshot type to explicit
-  renv::settings$snapshot.type("explicit", project = project_dir)
+  if (
+    !dir.exists(file.path(project_dir, "renv")) &&
+      !file.exists(file.path(project_dir, "renv.lock"))
+  ) {
+    backend_init(project_dir, effective_repos)
+  }
+  backend_set_explicit(project_dir)
 
   # Hydrate intent
+  hydrated <- FALSE
   if (!identical(install_self, "never")) {
     bootstrap_sources <- .libPaths()
-    maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
+    hydrated <- maybe_hydrate_intent(
+      project_dir,
+      bootstrap_sources,
+      install_self
+    )
   }
+  intent_set_tool_lifecycle(project_dir, isTRUE(hydrated))
 
   # Snapshot and restore
   intent_sync_project(project_dir)

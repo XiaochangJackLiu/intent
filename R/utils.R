@@ -62,6 +62,10 @@ load_default_repos <- function() {
 #' @return The bare package name.
 #' @keywords internal
 extract_pkg_name <- function(pkg) {
+  if (grepl("^[A-Za-z][A-Za-z0-9.]*=", pkg)) {
+    return(sub("=.*$", "", pkg))
+  }
+  pkg <- sub("^[A-Za-z]+::", "", pkg)
   pkg_name <- basename(pkg)
   pkg_name <- gsub("@.*$", "", pkg_name)
   pkg_name
@@ -267,6 +271,7 @@ intent_check_requested_source <- function(
 }
 
 intent_package_ref_source_class <- function(pkg) {
+  pkg <- sub("^[A-Za-z][A-Za-z0-9.]*=", "", pkg)
   if (is_http_url(pkg)) {
     return("url")
   }
@@ -296,7 +301,7 @@ intent_snapshot <- function(project, force = TRUE) {
   on.exit(unlink(candidate), add = TRUE)
 
   backend_snapshot(project, repos, force = force, lockfile = candidate)
-  lock <- renv::lockfile_read(candidate)
+  lock <- backend_read_lockfile(project, lockfile = candidate)
   lock <- intent_supplement_repositories(lock, repos)
   # Merge declared repos with supplemented names (e.g. RSPM from PPM).
   # Declared names take precedence; supplemented names that don't conflict
@@ -307,14 +312,16 @@ intent_snapshot <- function(project, force = TRUE) {
   )
   lock$R$Repositories <- c(repos, lock$R$Repositories[supplemented_names])
   intent_enforce_source_policy(project, lock, repos)
-  renv::lockfile_write(lock, file = candidate, project = project)
-  file.copy(candidate, lockfile, overwrite = TRUE)
+  intent_validate_candidate(project, lock)
+  backend_write_lockfile(lock, project, path = candidate)
+  intent_commit_lock(project, candidate)
   invisible(lockfile)
 }
 
 #' @keywords internal
 intent_restore <- function(project) {
   repos <- load_intent_repos(project)
+  intent_validate_candidate(project, intent_read_valid_lock(project))
   backend_restore(project, repos)
 }
 
@@ -389,6 +396,26 @@ intent_del_project_dep <- function(project, package) {
     file = file.path(project, "DESCRIPTION"),
     normalize = TRUE
   )
+  intent_set_requested_remote(project, package)
+  manifest <- desc::description$new(file.path(project, "DESCRIPTION"))
+  for (field in c("Config/intent/Imports", "Config/intent/Suggests")) {
+    value <- manifest$get_field(field, default = "")
+    if (nzchar(value)) {
+      items <- trimws(unlist(strsplit(value, ",", fixed = TRUE)))
+      items <- items[vapply(
+        items,
+        function(x) parse_override(x)$package != package,
+        logical(1)
+      )]
+      if (length(items)) {
+        manifest$set(field, paste(items, collapse = ", "))
+      } else {
+        manifest$del(field)
+      }
+    }
+    manifest$del(paste0(field, "/", package))
+  }
+  manifest$write(file.path(project, "DESCRIPTION"))
 }
 
 #' @keywords internal
@@ -400,7 +427,5 @@ intent_get_project_deps <- function(project) {
 
 #' @keywords internal
 intent_sync_project <- function(project) {
-  intent_snapshot(project)
-  repos <- load_intent_repos(project)
-  backend_restore(project, repos)
+  intent_reconcile(project)
 }

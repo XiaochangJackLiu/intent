@@ -54,40 +54,14 @@ test_that("intent_get_project_deps reads DESCRIPTION dependencies", {
   expect_true("testthat" %in% deps$package)
 })
 
-test_that("intent_sync_project calls backend snapshot and restore", {
-  tmp_dir <- tempfile()
-  dir.create(tmp_dir)
-  on.exit(unlink(tmp_dir, recursive = TRUE))
-
-  writeLines(
-    c(
-      "Package: testpkg",
-      "Config/intent/repos/CRAN: https://example.com"
-    ),
-    file.path(tmp_dir, "DESCRIPTION")
-  )
-
-  snap_called <- NULL
-  rest_called <- NULL
-
-  mockery::stub(intent_sync_project, "intent_snapshot", function(project) {
-    snap_called <<- list(project = project)
+test_that("intent_sync_project delegates to shared reconciliation", {
+  seen <- NULL
+  mockery::stub(intent_sync_project, "intent_reconcile", function(project) {
+    seen <<- project
   })
-  mockery::stub(
-    intent_sync_project,
-    "backend_restore",
-    function(project, repos) {
-      rest_called <<- list(project = project, repos = repos)
-    }
-  )
-
-  intent_sync_project(tmp_dir)
-
-  expect_equal(snap_called$project, tmp_dir)
-  expect_equal(rest_called$project, tmp_dir)
-  expect_equal(rest_called$repos[["CRAN"]], "https://example.com")
+  intent_sync_project("explicit-project")
+  expect_equal(seen, "explicit-project")
 })
-
 test_that("intent_snapshot does not replace lockfile on source policy error", {
   tmp_dir <- tempfile()
   dir.create(tmp_dir)
@@ -111,17 +85,21 @@ test_that("intent_snapshot does not replace lockfile on source policy error", {
       writeLines("candidate lockfile", lockfile)
     }
   )
-  mockery::stub(intent_snapshot, "renv::lockfile_read", function(file) {
-    list(
-      Packages = list(
-        glue = list(
-          Version = "1.0.0",
-          Source = "Repository",
-          Repository = "RSPM"
+  mockery::stub(
+    intent_snapshot,
+    "backend_read_lockfile",
+    function(project, lockfile) {
+      list(
+        Packages = list(
+          glue = list(
+            Version = "1.0.0",
+            Source = "Repository",
+            Repository = "RSPM"
+          )
         )
       )
-    )
-  })
+    }
+  )
 
   expect_error(
     intent_snapshot(tmp_dir),
@@ -163,12 +141,13 @@ test_that("repo_url_is_platform_specific detects manylinux in URL", {
   ))
 })
 
-test_that("intent_check_platform_repos returns empty when mode is off", {
+test_that("intent_check_platform_repos reports platform risk when mode is off", {
   repos <- c(
     CRAN = "https://packagemanager.posit.co/cran/__linux__/manylinux/latest"
   )
   issues <- intent_check_platform_repos(repos, list(mode = "off"))
-  expect_equal(nrow(issues), 0)
+  expect_equal(nrow(issues), 1)
+  expect_equal(issues$severity, "warning")
 })
 
 test_that("intent_check_platform_repos returns warning in warn mode", {

@@ -9,6 +9,8 @@
 #' By default, \code{adopt()} is non-mutating: it returns an
 #' \code{adoption_plan} that describes what would change. Pass
 #' \code{dry_run = FALSE} to apply the changes.
+#' Existing dependency constraints are preserved. The plan includes backend
+#' configuration, tool hydration and dependency reconciliation effects.
 #'
 #' @param path Character string. Path to the project directory. Defaults to
 #'   the current working directory.

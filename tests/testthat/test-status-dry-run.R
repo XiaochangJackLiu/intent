@@ -1,32 +1,18 @@
 test_that("cmd_status reports manifest, lockfile, and library drift", {
-  tmp_dir <- tempfile()
-  lib_dir <- tempfile()
-  dir.create(tmp_dir)
-  dir.create(lib_dir)
-  dir.create(file.path(lib_dir, "glue"))
-  on.exit(unlink(c(tmp_dir, lib_dir), recursive = TRUE))
-
+  project <- contract_project("glue, R6")
+  library <- tempfile()
+  dir.create(file.path(library, "glue"), recursive = TRUE)
+  on.exit(unlink(c(project, library), recursive = TRUE))
   writeLines(
-    c(
-      "Package: testpkg",
-      "Imports:",
-      "    glue,",
-      "    R6"
-    ),
-    file.path(tmp_dir, "DESCRIPTION")
+    c("Package: glue", "Version: 1.0.0", "Repository: CRAN"),
+    file.path(library, "glue", "DESCRIPTION")
   )
-  writeLines("{}", file.path(tmp_dir, "renv.lock"))
-
-  mockery::stub(cmd_status, "intent_locked_packages", function(project) {
-    c("glue", "rlang")
-  })
-  mockery::stub(cmd_status, "backend_library", function(project) lib_dir)
-  mockery::stub(cmd_status, "intent_library_packages", function(project) {
-    "glue"
-  })
-
-  current_status <- cmd_status(project = tmp_dir)
-
+  contract_lock(
+    project,
+    list(glue = contract_record(), rlang = contract_record())
+  )
+  local_mocked_bindings(backend_library = function(...) library)
+  current_status <- cmd_status(project)
   expect_s3_class(current_status, "intent_status")
   expect_setequal(current_status$manifest_packages, c("glue", "R6"))
   expect_setequal(current_status$locked_packages, c("glue", "rlang"))
@@ -35,7 +21,6 @@ test_that("cmd_status reports manifest, lockfile, and library drift", {
   expect_equal(current_status$missing_from_library, "rlang")
   expect_equal(nrow(current_status$source_violations), 0)
 })
-
 test_that("source policy accepts undeclared name via URL matching", {
   lock <- list(
     Packages = list(
@@ -240,7 +225,10 @@ test_that("add dry-run returns a plan without mutating DESCRIPTION", {
   on.exit(unlink(tmp_dir, recursive = TRUE))
 
   desc_path <- file.path(tmp_dir, "DESCRIPTION")
-  writeLines("Package: testpkg", desc_path)
+  writeLines(
+    c("Package: testpkg", "Config/intent/repos/CRAN: https://example.com"),
+    desc_path
+  )
   before <- readLines(desc_path)
 
   mockery::stub(cmd_add, "intent_install", function(...) {
@@ -271,7 +259,8 @@ test_that("remove dry-run returns a plan without mutating DESCRIPTION", {
     c(
       "Package: testpkg",
       "Imports:",
-      "    glue"
+      "    glue",
+      "Config/intent/repos/CRAN: https://example.com"
     ),
     desc_path
   )
@@ -307,7 +296,8 @@ test_that("sync dry-run returns planned work without backend mutation", {
     c(
       "Package: testpkg",
       "Imports:",
-      "    glue"
+      "    glue",
+      "Config/intent/repos/CRAN: https://example.com"
     ),
     file.path(tmp_dir, "DESCRIPTION")
   )
@@ -362,7 +352,10 @@ test_that("as.character.intent_status returns valid JSON", {
       "source_violations",
       "r_version",
       "r_constraint",
-      "lockfile_r_version"
+      "lockfile_r_version",
+      "incompatible_with_manifest",
+      "version_mismatches",
+      "source_mismatches"
     )
   )
 })

@@ -13,6 +13,9 @@ cmd_init <- function(
   renv_state <- init_renv_state(project_dir)
 
   stop_for_unsafe_init(classification, renv_state)
+  if (identical(classification$type, "intent_manifest")) {
+    intent_sync_plan(project_dir)
+  }
 
   desc_path <- file.path(project_dir, "DESCRIPTION")
 
@@ -39,6 +42,7 @@ cmd_init <- function(
 
   if (has_repos && length(repos) > 0) {
     warning("Repositories already exist in DESCRIPTION. Skipping.")
+    repos <- current_repos
   } else if (!has_repos && length(repos) > 0) {
     repo_names <- names(repos)
     if (is.null(repo_names) || any(repo_names == "")) {
@@ -67,6 +71,9 @@ cmd_init <- function(
       load_default_repos(),
       confirm_repos = confirm_repos
     )
+    if (!length(repos)) {
+      stop("No repositories configured. Pass repos explicitly.", call. = FALSE)
+    }
     for (i in seq_along(repos)) {
       rproject$set(
         sprintf("Config/intent/repos/%s", names(repos)[[i]]),
@@ -76,7 +83,13 @@ cmd_init <- function(
   }
 
   # R version constraint
-  if (!isFALSE(r_version) && !identical(r_version, NA)) {
+  existing_r <- rproject$get_deps()
+  has_r <- any(existing_r$package == "R" & existing_r$type == "Depends")
+  if (
+    !isFALSE(r_version) &&
+      !identical(r_version, NA) &&
+      !(is.null(r_version) && has_r)
+  ) {
     if (is.null(r_version)) {
       ver <- getRversion()
       r_version <- paste(ver$major, ver$minor, sep = ".")
@@ -108,13 +121,13 @@ cmd_init <- function(
 
   rproject$write(desc_path)
 
-  if (isTRUE(renv_state$renv_dir) || isTRUE(renv_state$lockfile)) {
-    maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
-    intent_sync_project(project_dir)
-  } else {
+  if (!isTRUE(renv_state$renv_dir) && !isTRUE(renv_state$lockfile)) {
     backend_init(project_dir, repos)
-    maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
   }
+  backend_set_explicit(project_dir)
+  hydrated <- maybe_hydrate_intent(project_dir, bootstrap_sources, install_self)
+  intent_set_tool_lifecycle(project_dir, isTRUE(hydrated))
+  intent_sync_project(project_dir)
 
   renviron_path <- file.path(project_dir, ".Renviron")
   renviron_lines <- if (file.exists(renviron_path)) {
@@ -247,7 +260,6 @@ maybe_hydrate_intent <- function(project, sources, install_self) {
 
   intent_path <- file.path(backend_library(project), "intent")
   if (dir.exists(intent_path)) {
-    intent_snapshot(project, force = TRUE)
     message("Hydrated intent into the project library.")
     return(invisible(TRUE))
   }
@@ -272,6 +284,15 @@ cmd_add <- function(pkgs, dev = FALSE, project = NULL, dry_run = FALSE) {
 
   project <- resolve_project(project)
   desc_type <- if (dev) "Suggests" else "Imports"
+  intent_validate_package_args(pkgs)
+  intent_sync_plan(project)
+  info <- get_intent_overrides(file.path(project, "DESCRIPTION"))
+  intent_preflight_package_sources(
+    project,
+    pkgs,
+    info,
+    load_intent_repos(project)
+  )
 
   if (dry_run) {
     return(new_intent_plan(
@@ -288,21 +309,45 @@ cmd_add <- function(pkgs, dev = FALSE, project = NULL, dry_run = FALSE) {
 
   message("Adding ", paste(pkgs, collapse = ", "), " to ", desc_type)
 
-  intent_install(project, pkgs)
-
+  added <- character()
   for (pkg in pkgs) {
     pkg_name <- extract_pkg_name(pkg)
-    version <- intent_get_installed_version(project, pkg_name)
+    current <- intent_get_project_deps(project)
+    existing <- current[current$package == pkg_name, , drop = FALSE]
+    version <- if (nrow(existing)) existing$version[[1]] else "*"
+    if (!nrow(existing)) {
+      added <- c(added, pkg_name)
+    }
+    if (
+      grepl("@", pkg, fixed = TRUE) &&
+        intent_package_ref_source_class(pkg) == "repository"
+    ) {
+      version <- intent_package_request_constraint(pkg)
+    }
     intent_set_project_dep(
       project,
       package = pkg_name,
       type = desc_type,
       version = version
     )
+    if (
+      intent_package_ref_source_class(pkg) != "repository" || !nrow(existing)
+    ) {
+      intent_set_requested_remote(project, pkg_name, pkg)
+    }
   }
-
-  message("Updating lockfile...")
-  intent_snapshot(project)
+  intent_reconcile(project)
+  for (pkg in added) {
+    deps <- intent_get_project_deps(project)
+    if (identical(deps$version[deps$package == pkg][[1]], "*")) {
+      intent_set_project_dep(
+        project,
+        pkg,
+        desc_type,
+        intent_get_installed_version(project, pkg)
+      )
+    }
+  }
 
   invisible(pkgs)
 }
@@ -313,6 +358,17 @@ cmd_remove <- function(pkgs, project = NULL, dry_run = FALSE) {
   }
 
   project <- resolve_project(project)
+  intent_validate_package_args(pkgs)
+  declared <- intent_get_project_deps(project)$package
+  undeclared <- setdiff(pkgs, declared)
+  if (length(undeclared)) {
+    stop(
+      "Not a declared dependency: ",
+      paste(undeclared, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  intent_sync_plan(project)
 
   if (dry_run) {
     return(new_intent_plan(
@@ -333,122 +389,20 @@ cmd_remove <- function(pkgs, project = NULL, dry_run = FALSE) {
     intent_del_project_dep(project, package = pkg)
   }
 
-  message("Removing packages from library...")
-  backend_remove(project, pkgs)
-
-  message("Updating lockfile...")
-  intent_snapshot(project)
-
-  message("Pruning orphan dependencies...")
-  intent_restore(project)
+  intent_reconcile(project)
 
   invisible(pkgs)
 }
 
 cmd_sync <- function(project = NULL, dry_run = FALSE, prune = TRUE) {
   project <- resolve_project(project)
-
-  desc_path <- file.path(project, "DESCRIPTION")
-  if (!file.exists(desc_path)) {
-    stop(
-      "No DESCRIPTION file found. Run `intent::init()` or `intent::add()` first.",
-      call. = FALSE
-    )
-  }
-
-  message("Syncing environment...")
-
-  desc_deps <- desc::desc_get_deps(file = desc_path)
-  target_types <- c("Imports", "Suggests")
-  intent_pkgs <- desc_deps$package[desc_deps$type %in% target_types]
-  intent_pkgs <- intent_pkgs[intent_pkgs != "R"]
-
-  overrides_info <- get_intent_overrides(desc_path)
-
-  lock_path <- file.path(project, "renv.lock")
-  if (file.exists(lock_path)) {
-    lock <- backend_read_lockfile(project)
-    lock_pkgs <- names(lock$Packages)
-    missing_pkgs <- setdiff(intent_pkgs, lock_pkgs)
-
-    overridden_intent_pkgs <- intersect(
-      intent_pkgs,
-      names(overrides_info$overrides)
-    )
-    for (pkg in overridden_intent_pkgs) {
-      if (pkg %in% lock_pkgs) {
-        lock_ver <- lock$Packages[[pkg]]$Version
-        parsed <- overrides_info$overrides[[pkg]]
-        if (lock_ver != parsed$version) {
-          missing_pkgs <- c(missing_pkgs, pkg)
-        }
-      }
-    }
-    missing_pkgs <- unique(missing_pkgs)
-    retained_pkgs <- intent_lock_dependency_closure(
-      lock,
-      roots = c(intent_pkgs, "intent", "pak", "renv")
-    )
-    extra_pkgs <- setdiff(lock_pkgs, retained_pkgs)
-  } else {
-    missing_pkgs <- intent_pkgs
-    extra_pkgs <- character()
-  }
-
-  missing_pkgs <- missing_pkgs[missing_pkgs != "intent"]
-
+  plan <- intent_reconcile(project, dry_run = dry_run, prune = prune)
   if (dry_run) {
-    actions <- "would_restore"
-    if (length(missing_pkgs) > 0) {
-      actions <- c(
-        paste0("would_install: ", paste(missing_pkgs, collapse = ", ")),
-        "would_snapshot",
-        actions
-      )
-    }
-    if (prune && length(extra_pkgs) > 0) {
-      actions <- c(
-        paste0("would_prune: ", paste(extra_pkgs, collapse = ", ")),
-        actions
-      )
-    }
-
-    return(new_intent_plan(
-      project = project,
-      command = "sync",
-      actions = actions,
-      packages = if (prune) union(missing_pkgs, extra_pkgs) else missing_pkgs
-    ))
+    return(plan)
   }
-
-  if (prune && length(extra_pkgs) > 0) {
-    message(
-      "Removing packages no longer in DESCRIPTION: ",
-      paste(extra_pkgs, collapse = ", ")
-    )
-    backend_remove(project, extra_pkgs)
-
-    message("Updating lockfile after removal...")
-    intent_snapshot(project)
-  }
-
-  if (length(missing_pkgs) > 0) {
-    message(
-      "Installing/Updating packages from DESCRIPTION: ",
-      paste(missing_pkgs, collapse = ", ")
-    )
-    intent_install(project, missing_pkgs)
-
-    message("Updating lockfile...")
-    intent_snapshot(project)
-  }
-
-  message("Restoring library from lockfile...")
-  intent_restore(project)
-
   message("Environment synchronized.")
+  invisible(plan)
 }
-
 cmd_status <- function(project = NULL) {
   project <- resolve_project(project)
 
@@ -465,8 +419,16 @@ cmd_status <- function(project = NULL) {
     intent_r_constraint(project)
   }
   lockfile_r_version <- NULL
+  mismatches <- character()
+  drift <- list(versions = character(), sources = character())
   if (file.exists(file.path(project, "renv.lock"))) {
-    lock <- backend_read_lockfile(project)
+    lock <- intent_read_valid_lock(project)
+    mismatches <- intent_lock_mismatches(
+      intent_dependency_specs(project),
+      lock,
+      repos
+    )
+    drift <- intent_library_drift(project, lock)
     source_violations <- intent_check_source_policy(
       lock,
       repos = repos,
@@ -486,7 +448,10 @@ cmd_status <- function(project = NULL) {
     source_policy = source_policy,
     source_violations = source_violations,
     r_constraint = r_constraint,
-    lockfile_r_version = lockfile_r_version
+    lockfile_r_version = lockfile_r_version,
+    incompatible_with_manifest = mismatches,
+    version_mismatches = drift$versions,
+    source_mismatches = drift$sources
   )
 }
 
@@ -497,7 +462,7 @@ cmd_verify <- function(project = NULL) {
 
   new_intent_verification(
     project = project,
-    ok = nrow(issues) == 0,
+    ok = !any(issues$severity == "error"),
     issues = issues,
     status = current_status
   )
@@ -533,7 +498,8 @@ cmd_adopt <- function(
     rproject = rproject,
     strategy = strategy,
     effective_repos = effective_repos,
-    confirm = confirm
+    confirm = confirm,
+    install_self = install_self
   )
 
   if (dry_run) {

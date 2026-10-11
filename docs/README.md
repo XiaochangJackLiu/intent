@@ -13,6 +13,10 @@ change belongs in this package.
 - [03 CLI Design](03-cli-design.md): the terminal-first user interface.
 - [04 renv Boundary](04-renv-boundary.md): how `intent` should use `renv` without becoming `renv`.
 - [05 Roadmap](05-roadmap.md): staged work to move from the current package to the intended design.
+- [06 Product Boundary](06-product-boundary.md): accepted user-facing scope and the process for evaluating which backend capabilities to retain or replace.
+- [07 Next Steps](07-next-steps.md): proposed execution stages, deliverables and acceptance conditions following the consistency review.
+- [08 Workflow Contracts](08-workflow-contracts.md): accepted sync policy, implementation defaults and historical design questions.
+- [09 Backend Capability Assessment](09-backend-capability-matrix.md): tested APIs, actual experiments and remaining gaps.
 - [Refactors](refactors/README.md): implementation-level plans for individual refactoring efforts.
 
 ## Working Rule

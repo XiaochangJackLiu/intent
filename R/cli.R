@@ -26,7 +26,11 @@ cli_main <- function(args) {
 }
 
 cli_init <- function(args) {
-  parsed <- cli_collect_repos(args)
+  parsed <- cli_collect_repos(
+    args,
+    command = "init",
+    allowed_options = c("--repo", "--yes", "--no-default-repo")
+  )
   path <- "."
   if (length(parsed$args) > 1) {
     stop("`intent init` accepts at most one path argument.", call. = FALSE)
@@ -44,37 +48,66 @@ cli_init <- function(args) {
 }
 
 cli_add <- function(args) {
-  parsed <- cli_parse_common(args)
+  parsed <- cli_parse_common(
+    args,
+    command = "add",
+    allowed_options = c("--project", "--dev", "--dry-run")
+  )
   dev <- parsed$flags[["dev"]]
   pkgs <- parsed$args
   if (length(pkgs) == 0) {
     stop("No packages specified.", call. = FALSE)
   }
 
-  cmd_add(
+  result <- cmd_add(
     pkgs = pkgs,
     dev = dev,
     project = parsed$project,
     dry_run = parsed$dry_run
   )
+  if (parsed$dry_run) {
+    print(result)
+  }
+  invisible(result)
 }
 
 cli_remove <- function(args) {
-  parsed <- cli_parse_common(args)
+  parsed <- cli_parse_common(
+    args,
+    command = "remove",
+    allowed_options = c("--project", "--dry-run")
+  )
   pkgs <- parsed$args
   if (length(pkgs) == 0) {
     stop("No packages specified.", call. = FALSE)
   }
 
-  cmd_remove(
+  result <- cmd_remove(
     pkgs = pkgs,
     project = parsed$project,
     dry_run = parsed$dry_run
   )
+  if (parsed$dry_run) {
+    print(result)
+  }
+  invisible(result)
 }
 
 cli_sync <- function(args) {
-  parsed <- cli_parse_common(args)
+  parsed <- cli_parse_common(
+    args,
+    command = "sync",
+    allowed_options = c(
+      "--project",
+      "--dry-run",
+      "--json",
+      "--prune",
+      "--no-prune"
+    )
+  )
+  if (parsed$json && !parsed$dry_run) {
+    stop("--json requires --dry-run for intent sync.", call. = FALSE)
+  }
   if (length(parsed$args) > 0) {
     stop("`intent sync` does not accept package arguments.", call. = FALSE)
   }
@@ -85,14 +118,22 @@ cli_sync <- function(args) {
     dry_run = parsed$dry_run,
     prune = prune
   )
-  if (parsed$json && parsed$dry_run) {
-    cat(as.character(result), "\n", sep = "")
+  if (parsed$dry_run) {
+    if (parsed$json) {
+      cat(as.character(result), "\n", sep = "")
+    } else {
+      print(result)
+    }
   }
   invisible(result)
 }
 
 cli_status <- function(args) {
-  parsed <- cli_parse_common(args)
+  parsed <- cli_parse_common(
+    args,
+    command = "status",
+    allowed_options = c("--project", "--json")
+  )
   if (length(parsed$args) > 0) {
     stop("`intent status` does not accept package arguments.", call. = FALSE)
   }
@@ -107,7 +148,11 @@ cli_status <- function(args) {
 }
 
 cli_verify <- function(args) {
-  parsed <- cli_parse_common(args)
+  parsed <- cli_parse_common(
+    args,
+    command = "verify",
+    allowed_options = c("--project", "--json")
+  )
   if (length(parsed$args) > 0) {
     stop("`intent verify` does not accept package arguments.", call. = FALSE)
   }
@@ -125,7 +170,22 @@ cli_verify <- function(args) {
 }
 
 cli_adopt <- function(args) {
-  parsed <- cli_collect_repos(args)
+  parsed <- cli_collect_repos(
+    args,
+    command = "adopt",
+    allowed_options = c(
+      "--project",
+      "--repo",
+      "--strategy",
+      "--apply",
+      "--dry-run",
+      "--json",
+      "--yes"
+    )
+  )
+  if (parsed$apply && parsed$dry_run) {
+    stop("--apply and --dry-run cannot be used together.", call. = FALSE)
+  }
   path <- "."
   if (length(parsed$args) > 1) {
     stop("`intent adopt` accepts at most one path argument.", call. = FALSE)
@@ -150,7 +210,7 @@ cli_adopt <- function(args) {
     path = parsed$project %||% path,
     repos = parsed$repos,
     strategy = strategy,
-    dry_run = !isTRUE(parsed$apply),
+    dry_run = dry_run,
     confirm = !isTRUE(parsed$yes)
   )
 
@@ -162,7 +222,31 @@ cli_adopt <- function(args) {
   invisible(result)
 }
 
-cli_parse_common <- function(args) {
+cli_validate_option <- function(arg, command, allowed_options) {
+  if (
+    !is.null(allowed_options) &&
+      startsWith(arg, "--") &&
+      !arg %in% allowed_options
+  ) {
+    stop(
+      "`intent ",
+      command,
+      "` does not support option: ",
+      arg,
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
+cli_option_value <- function(args, i) {
+  if (i == length(args) || startsWith(args[[i + 1]], "--")) {
+    stop("Missing value for ", args[[i]], ".", call. = FALSE)
+  }
+  args[[i + 1]]
+}
+
+cli_parse_common <- function(args, command = NULL, allowed_options = NULL) {
   project <- NULL
   dry_run <- FALSE
   json <- FALSE
@@ -172,11 +256,9 @@ cli_parse_common <- function(args) {
 
   while (i <= length(args)) {
     arg <- args[[i]]
+    cli_validate_option(arg, command, allowed_options)
     if (identical(arg, "--project")) {
-      if (i == length(args)) {
-        stop("Missing value for --project.", call. = FALSE)
-      }
-      project <- args[[i + 1]]
+      project <- cli_option_value(args, i)
       i <- i + 2
     } else if (identical(arg, "--dry-run")) {
       dry_run <- TRUE
@@ -210,7 +292,7 @@ cli_parse_common <- function(args) {
   )
 }
 
-cli_collect_repos <- function(args) {
+cli_collect_repos <- function(args, command = NULL, allowed_options = NULL) {
   repos <- character()
   rest <- character()
   yes <- FALSE
@@ -224,18 +306,13 @@ cli_collect_repos <- function(args) {
 
   while (i <= length(args)) {
     arg <- args[[i]]
+    cli_validate_option(arg, command, allowed_options)
     if (identical(arg, "--repo")) {
-      if (i == length(args)) {
-        stop("Missing value for --repo.", call. = FALSE)
-      }
-      repo <- cli_parse_repo(args[[i + 1]])
+      repo <- cli_parse_repo(cli_option_value(args, i))
       repos[names(repo)] <- repo
       i <- i + 2
     } else if (identical(arg, "--strategy")) {
-      if (i == length(args)) {
-        stop("Missing value for --strategy.", call. = FALSE)
-      }
-      strategy <- args[[i + 1]]
+      strategy <- cli_option_value(args, i)
       i <- i + 2
     } else if (identical(arg, "--apply")) {
       apply <- TRUE
@@ -247,10 +324,7 @@ cli_collect_repos <- function(args) {
       json <- TRUE
       i <- i + 1
     } else if (identical(arg, "--project")) {
-      if (i == length(args)) {
-        stop("Missing value for --project.", call. = FALSE)
-      }
-      project <- args[[i + 1]]
+      project <- cli_option_value(args, i)
       i <- i + 2
     } else if (identical(arg, "--yes")) {
       yes <- TRUE
@@ -301,7 +375,7 @@ cli_print_help <- function() {
       "  intent status [--project path] [--json]",
       "  intent verify [--project path] [--json]",
       "  intent doctor [--project path] [--json]",
-      "  intent adopt [path] [--repo NAME=URL] [--strategy name] [--apply] [--json] [--yes]",
+      "  intent adopt [path] [--project path] [--repo NAME=URL] [--strategy name] [--apply | --dry-run] [--json] [--yes]",
       sep = "\n"
     ),
     "\n"

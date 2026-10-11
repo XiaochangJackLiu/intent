@@ -19,13 +19,17 @@ export(status)
 export(sync)
 export(verify)
 importFrom(callr,r)
-importFrom(desc,desc_del_dep)
-importFrom(desc,desc_get_deps)
-importFrom(desc,desc_set_dep)
-importFrom(desc,description)
+importFrom(desc,
+  desc_del_dep,
+  desc_get_deps,
+  desc_set_dep,
+  description
+)
 importFrom(pak,pkg_install)
-importFrom(renv,init)
-importFrom(renv,lockfile_read)
-importFrom(renv,paths)
-importFrom(renv,remove)
-importFrom(renv,snapshot)
+importFrom(renv,
+  init,
+  lockfile_read,
+  paths,
+  remove,
+  snapshot
+)
